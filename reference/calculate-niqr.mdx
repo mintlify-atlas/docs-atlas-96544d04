@@ -1,0 +1,45 @@
+---
+title: 'calculate_niqr: Normalized IQR scale estimator'
+description: 'Compute nIQR = 0.7413 * IQR as an outlier-resistant standard deviation estimate consistent with normal distribution, per ISO 13528:2022 Section 9.4.'
+keywords: ['nIQR', 'robust statistics', 'scale estimator', 'proficiency testing', 'ISO 13528']
+---
+
+`calculate_niqr(x)` computes a robust estimate of scale by multiplying the interquartile range by the consistency factor 0.7413. For data drawn from a normal distribution, this estimate converges to the population standard deviation σ, making it a drop-in replacement for the classical SD wherever outlier resistance is required.
+
+## Parameters
+
+<ParamField path="x" type="numeric vector" required>
+  A numeric vector of participant results. Non-finite values (`NA`, `NaN`, `Inf`, `-Inf`) are silently removed before calculation.
+</ParamField>
+
+## Return value
+
+<ResponseField name="nIQR" type="numeric scalar">
+  The normalized interquartile range: `0.7413 × (Q3 − Q1)`, computed on the finite subset of `x` using R's default quantile type 7. Returns `NA` if fewer than two finite values remain after filtering.
+</ResponseField>
+
+<Note>
+  The function returns `NA_real_` — not an error — when the finite subset of `x` contains fewer than two values. Check for `NA` before passing the result to downstream calculations.
+</Note>
+
+## ISO reference
+
+Defined in **ISO 13528:2022, Section 9.4** as one of two recommended robust scale estimators for proficiency testing. The factor 0.7413 ≈ 1 / (2 × Φ⁻¹(0.75)), where Φ⁻¹ is the standard-normal quantile function, ensuring consistency under normality.
+
+## Example
+
+```r
+# Calculate nIQR for proficiency testing data
+values <- c(10.1, 10.2, 9.9, 10.0, 10.3, 9.8, 10.1)
+calculate_niqr(values)
+#> [1] 0.1483
+
+# Returns NA for a single finite value
+calculate_niqr(c(10.0, NA, Inf))
+#> [1] NA
+```
+
+## See also
+
+- [`calculate_mad_e`](/reference/calculate-mad-e) — alternative robust scale estimator based on the median absolute deviation
+- [`run_algorithm_a`](/reference/run-algorithm-a) — ISO 13528 Algorithm A, which uses the scaled MAD as its initial scale estimate

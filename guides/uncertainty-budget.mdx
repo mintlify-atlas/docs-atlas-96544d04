@@ -1,0 +1,140 @@
+---
+title: 'Computing the uncertainty budget for PT assigned values'
+description: 'Calculate u_hom and u_stab with ptcalc and combine them into the total standard uncertainty of the assigned value following ISO 13528:2022 Section 9.5.'
+keywords: ['uncertainty budget', 'u_hom', 'u_stab', 'assigned value uncertainty', 'ISO 13528', 'proficiency testing', 'ptcalc']
+---
+
+The assigned value in a proficiency testing round carries a combined standard uncertainty built from contributions traceable to the characterisation studies. ptcalc provides `calculate_u_hom()` and `calculate_u_stab()` to compute these two components, which you then combine using standard uncertainty propagation. This guide explains each function, shows how the components relate to your homogeneity and stability results, and walks through a complete worked example.
+
+## Homogeneity uncertainty — `calculate_u_hom()`
+
+The homogeneity uncertainty contribution equals the between-sample standard deviation `ss` from the homogeneity study. It represents the variability that arises from sampling different items from the batch:
+
+```r
+u_hom = ss
+```
+
+```r
+library(ptcalc)
+
+# ss from a completed homogeneity study
+u_hom <- calculate_u_hom(ss = hom$ss)
+cat("u_hom:", round(u_hom, 4), "\n")
+```
+
+<Note>
+  `calculate_u_hom()` is a thin wrapper around the identity function. Its value
+  is to make the origin of `u_hom` explicit in your analysis script and to match
+  the naming convention used by `calculate_u_stab()`.
+</Note>
+
+## Stability uncertainty — `calculate_u_stab()`
+
+The stability uncertainty contribution depends on whether the items passed the stability criterion:
+
+| Condition                               | u_stab formula                      |
+| --------------------------------------- | ----------------------------------- |
+| `diff_hom_stab ≤ c_criterion` (stable)  | 0                                   |
+| `diff_hom_stab > c_criterion` (drifted) | `diff_hom_stab / sqrt(3)`           |
+
+When the criterion is met, stability adds zero to the uncertainty budget — you have evidence that the property value did not change. When the criterion is not met, the drift is treated as a rectangular distribution with half-width `diff_hom_stab`, giving a standard uncertainty of `diff / sqrt(3)`.
+
+```r
+u_stab <- calculate_u_stab(
+  diff_hom_stab = stab$diff_hom_stab,
+  c_criterion   = c_stab
+)
+cat("u_stab:", round(u_stab, 4), "\n")
+```
+
+## Combining components into total uncertainty
+
+Once you have `u_hom` and `u_stab`, combine them with any other standard uncertainty components (e.g., measurement uncertainty of the reference method `u_char`) using root-sum-of-squares:
+
+```
+u_total = sqrt(u_hom² + u_stab² + u_char² + ...)
+```
+
+For many routine PT rounds only `u_hom` and `u_stab` are relevant:
+
+```r
+u_total <- sqrt(u_hom^2 + u_stab^2)
+cat("Combined standard uncertainty:", round(u_total, 4), "\n")
+
+# Expanded uncertainty at k = 2 (approximately 95 % confidence)
+U_total <- 2 * u_total
+cat("Expanded uncertainty (k=2)   :", round(U_total, 4), "\n")
+```
+
+<Tip>
+  Report `U_total` (expanded uncertainty at k = 2) alongside the assigned value
+  in participant reports. Participants who use En-scoring will require this
+  value as `U_xpt`.
+</Tip>
+
+## Complete worked example
+
+The example below chains a homogeneity study into a stability study, then assembles the full uncertainty budget. Each section maps directly to a step in ISO 13528:2022 Section 9.5.
+
+```r
+library(ptcalc)
+
+# ── Step 1: Homogeneity study ──────────────────────────────────────────────────
+set.seed(42)
+hom_data <- matrix(rnorm(20, mean = 10, sd = 0.5), nrow = 10, ncol = 2)
+
+hom <- calculate_homogeneity_stats(hom_data)
+if (!is.null(hom$error)) stop(hom$error)
+
+cat("--- Homogeneity ---\n")
+cat("ss        :", round(hom$ss, 4), "\n")
+cat("sigma_pt  :", round(hom$sigma_pt, 4), "\n")
+cat("u_sigma_pt:", round(hom$u_sigma_pt, 4), "\n")
+
+# ── Step 2: Stability study ────────────────────────────────────────────────────
+set.seed(99)
+stab_data <- matrix(rnorm(20, mean = 10.04, sd = 0.5), nrow = 10, ncol = 2)
+
+stab <- calculate_stability_stats(
+  stab_sample_data       = stab_data,
+  hom_general_mean_homog = hom$general_mean_homog,
+  hom_stab_x_pt          = hom$x_pt,
+  hom_stab_sigma_pt      = hom$sigma_pt
+)
+if (!is.null(stab$error)) stop(stab$error)
+
+c_stab <- calculate_stability_criterion(stab$hom_stab_sigma_pt)
+
+cat("\n--- Stability ---\n")
+cat("diff_hom_stab:", round(stab$diff_hom_stab, 4), "\n")
+cat("c_stab       :", round(c_stab, 4), "\n")
+
+# Evaluate to confirm pass/fail
+eval_stab <- evaluate_stability(stab$diff_hom_stab, c_stab)
+cat(eval_stab$conclusion, "\n")
+
+# ── Step 3: Uncertainty components ────────────────────────────────────────────
+u_hom  <- calculate_u_hom(hom$ss)
+u_stab <- calculate_u_stab(stab$diff_hom_stab, c_stab)
+
+cat("\n--- Uncertainty budget ---\n")
+cat("u_hom :", round(u_hom, 4), "\n")
+cat("u_stab:", round(u_stab, 4), "\n")
+
+# ── Step 4: Combined uncertainty ──────────────────────────────────────────────
+u_total <- sqrt(u_hom^2 + u_stab^2)
+U_total <- 2 * u_total  # k = 2
+
+cat("\nAssigned value    :", round(hom$x_pt, 4), "\n")
+cat("u_total (k=1)     :", round(u_total, 4), "\n")
+cat("U_total (k=2, 95%):", round(U_total, 4), "\n")
+```
+
+Running this script produces an assigned value, its standard uncertainty, and its expanded uncertainty — the three numbers you need to populate participant score sheets and the PT report.
+
+<Warning>
+  If `u_stab > 0` because the stability criterion was not met, investigate
+  whether the assigned value itself needs to be revised to account for the
+  drift. Simply inflating the uncertainty budget may not be sufficient when
+  the drift is large relative to `sigma_pt`.
+</Warning>

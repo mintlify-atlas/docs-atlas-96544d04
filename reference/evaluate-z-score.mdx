@@ -1,0 +1,92 @@
+---
+title: "evaluate_z_score: classify a z-score result"
+description: "Classify a z, z-prime, or zeta-score as Satisfactorio, Cuestionable, or No satisfactorio using ISO 13528:2022 three-tier performance thresholds."
+---
+
+`evaluate_z_score()` and `evaluate_z_score_vec()` classify z-scores (and z'-scores or zeta-scores, which share the same thresholds) against the performance criteria defined in ISO 13528:2022. The scalar function handles one value at a time; the vectorized version processes a whole vector efficiently using `dplyr::case_when()`.
+
+## Performance thresholds
+
+| Condition | Classification |
+|---|---|
+| `\|z\| <= 2` | `"Satisfactorio"` |
+| `2 < \|z\| < 3` | `"Cuestionable"` |
+| `\|z\| >= 3` | `"No satisfactorio"` |
+| Not finite (`NA`, `NaN`, `Inf`) | `"N/A"` |
+
+## `evaluate_z_score(z)`
+
+Evaluates a single z-score and returns a character string.
+
+### Parameters
+
+<ParamField path="z" type="numeric" required>
+  A single z-score, z'-score, or zeta-score value. Non-finite values (`NA`, `NaN`, `Inf`, `-Inf`) return `"N/A"`.
+</ParamField>
+
+### Return value
+
+<ResponseField name="evaluation" type="character">
+  One of `"Satisfactorio"`, `"Cuestionable"`, `"No satisfactorio"`, or `"N/A"`.
+</ResponseField>
+
+## `evaluate_z_score_vec(z)`
+
+Vectorized version of `evaluate_z_score()`. Applies the same thresholds element-wise across a numeric vector using `dplyr::case_when()`. Use this function when working with data frames or when evaluating many scores at once.
+
+### Parameters
+
+<ParamField path="z" type="numeric" required>
+  A numeric vector of z-scores, z'-scores, or zeta-scores. Non-finite elements return `"N/A"`.
+</ParamField>
+
+### Return value
+
+<ResponseField name="evaluations" type="character vector">
+  A character vector of the same length as `z`, with each element set to `"Satisfactorio"`, `"Cuestionable"`, `"No satisfactorio"`, or `"N/A"`.
+</ResponseField>
+
+<Note>
+  `evaluate_z_score_vec()` requires the `dplyr` package. It is suitable for use inside `dplyr::mutate()` pipelines. For single-value lookups, prefer the scalar `evaluate_z_score()` to avoid the overhead of `case_when()`.
+</Note>
+
+## Examples
+
+```r
+# Scalar evaluation
+evaluate_z_score(1.5)   # "Satisfactorio"
+evaluate_z_score(2.5)   # "Cuestionable"
+evaluate_z_score(3.1)   # "No satisfactorio"
+evaluate_z_score(NA)    # "N/A"
+evaluate_z_score(Inf)   # "N/A"
+
+# Vectorized evaluation
+scores <- c(1.0, 2.5, -3.2, NA, 0.8)
+evaluate_z_score_vec(scores)
+# [1] "Satisfactorio"    "Cuestionable"     "No satisfactorio" "N/A"
+# [5] "Satisfactorio"
+
+# Use inside a dplyr pipeline
+library(dplyr)
+results <- tibble(z = c(1.0, 2.7, 3.5, NA)) |>
+  mutate(performance = evaluate_z_score_vec(z))
+results
+# # A tibble: 4 × 2
+#       z performance
+#   <dbl> <chr>
+# 1   1   Satisfactorio
+# 2   2.7 Cuestionable
+# 3   3.5 No satisfactorio
+# 4  NA   N/A
+```
+
+## ISO reference
+
+ISO 13528:2022, *Statistical methods for use in proficiency testing by interlaboratory comparison*, Section 10.2 (threshold criteria apply to z, z', and zeta-scores equally).
+
+## See also
+
+- [`calculate_z_score`](/reference/calculate-z-score) — compute a z-score
+- [`calculate_z_prime_score`](/reference/calculate-z-prime-score) — compute a z'-score
+- [`calculate_zeta_score`](/reference/calculate-zeta-score) — compute a zeta-score
+- [`evaluate_en_score`](/reference/evaluate-en-score) — classify an En-score (different thresholds)

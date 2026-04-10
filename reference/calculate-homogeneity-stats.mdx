@@ -1,0 +1,118 @@
+---
+title: 'calculate_homogeneity_stats: homogeneity ANOVA statistics'
+description: 'Compute between-sample SD, within-sample SD, robust sigma (MADe), and u_sigma_pt from replicate measurements per ISO 13528:2022 Section 9.2.'
+---
+
+`calculate_homogeneity_stats(sample_data)` computes the full set of homogeneity statistics required by ISO 13528:2022 Section 9.2. It performs a one-way ANOVA decomposition on replicate measurements, derives the between-sample standard deviation `ss`, the within-sample standard deviation `sw`, and a robust sigma estimate `MADe` with its associated uncertainty `u_sigma_pt`.
+
+## Parameters
+
+<ParamField path="sample_data" type="matrix | data.frame" required>
+  Measurement data for the homogeneity study. Rows represent samples (groups) and columns represent replicates. The function accepts either a numeric `matrix` or a `data.frame`; data frames are coerced to a matrix internally. Requires at least 2 rows (samples) and at least 2 columns (replicates), otherwise the function returns an error.
+</ParamField>
+
+## Return value
+
+Returns a named list. When validation fails the list contains only `error` (a character string); on success `error` is `NULL` and all other fields are populated.
+
+<ResponseField name="g" type="integer">
+  Number of samples (groups), equal to `nrow(sample_data)`.
+</ResponseField>
+
+<ResponseField name="m" type="integer">
+  Number of replicates per sample, equal to `ncol(sample_data)`.
+</ResponseField>
+
+<ResponseField name="general_mean_homog" type="numeric">
+  Overall mean of all values in `sample_data` (not the mean of sample means).
+</ResponseField>
+
+<ResponseField name="sample_means" type="numeric vector">
+  Row-wise means across replicates, one value per sample.
+</ResponseField>
+
+<ResponseField name="x_pt" type="numeric">
+  Median of the first replicate column. Used as the reference assigned value in downstream stability calculations.
+</ResponseField>
+
+<ResponseField name="s_x_bar_sq" type="numeric">
+  Variance of `sample_means` (`var(sample_means)`).
+</ResponseField>
+
+<ResponseField name="s_xt" type="numeric">
+  Standard deviation of `sample_means` (`sqrt(s_x_bar_sq)`).
+</ResponseField>
+
+<ResponseField name="sw" type="numeric">
+  Within-sample standard deviation. When `m == 2` this is computed from the range method: `sqrt(sum(|col1 - col2|^2) / (2 * g))`. For `m > 2` it is the square root of the mean of per-row variances.
+</ResponseField>
+
+<ResponseField name="sw_sq" type="numeric">
+  Within-sample variance (`sw^2`).
+</ResponseField>
+
+<ResponseField name="ss_sq" type="numeric">
+  Between-sample variance component: `|s_x_bar_sq - sw_sq / m|`.
+</ResponseField>
+
+<ResponseField name="ss" type="numeric">
+  Between-sample standard deviation (`sqrt(ss_sq)`). Pass this value to `calculate_homogeneity_criterion` and `evaluate_homogeneity`.
+</ResponseField>
+
+<ResponseField name="abs_diff_from_xpt" type="numeric vector">
+  Absolute differences between the second replicate column values and `x_pt`, one value per sample. Used internally to derive `sigma_pt`.
+</ResponseField>
+
+<ResponseField name="sigma_pt" type="numeric">
+  Median of `abs_diff_from_xpt`. This is the raw robust location-spread estimate before the 1.483 consistency correction.
+</ResponseField>
+
+<ResponseField name="MADe" type="numeric">
+  Robust sigma estimate: `1.483 * sigma_pt`. Scaled so that MADe equals the standard deviation for a normal distribution.
+</ResponseField>
+
+<ResponseField name="u_sigma_pt" type="numeric">
+  Standard uncertainty of `MADe`: `1.25 * MADe / sqrt(g)`.
+</ResponseField>
+
+<ResponseField name="nIQR" type="numeric">
+  Normalised interquartile range of the first replicate column: `0.7413 * (Q3 - Q1)`. Calculated per ISO 13528:2022 Section 8.1.2.
+</ResponseField>
+
+<ResponseField name="error" type="character | NULL">
+  `NULL` on success. Returns a descriptive error string when `g < 2` or `m < 2`.
+</ResponseField>
+
+## Notes
+
+<Note>
+  The function returns `sigma_pt` as the raw median of absolute differences and `MADe` as `1.483 * sigma_pt`. Use `MADe` (not the raw `sigma_pt`) as the input to `calculate_homogeneity_criterion()` and `calculate_homogeneity_criterion_expanded()`.
+</Note>
+
+<Info>
+  ISO 13528:2022 Section 9.2 specifies that the within-sample standard deviation for duplicate measurements (`m = 2`) is derived from pairwise ranges rather than sample variances. The function applies this rule automatically.
+</Info>
+
+## Example
+
+```r
+set.seed(42)
+
+# 10 proficiency test items, each measured in duplicate
+sample_data <- matrix(rnorm(20, mean = 10, sd = 0.5), nrow = 10, ncol = 2)
+
+stats <- calculate_homogeneity_stats(sample_data)
+
+cat("Samples (g):              ", stats$g, "\n")
+cat("Replicates (m):           ", stats$m, "\n")
+cat("Overall mean:             ", round(stats$general_mean_homog, 4), "\n")
+cat("Within-sample SD (sw):    ", round(stats$sw, 4), "\n")
+cat("Between-sample SD (ss):   ", round(stats$ss, 4), "\n")
+cat("Robust sigma (MADe):      ", round(stats$MADe, 4), "\n")
+cat("Uncertainty u_sigma_pt:   ", round(stats$u_sigma_pt, 4), "\n")
+
+# Check for errors before proceeding
+if (!is.null(stats$error)) {
+  stop(stats$error)
+}
+```

@@ -1,0 +1,98 @@
+---
+title: 'evaluate_en_score: classify an En-score result'
+description: 'Classify an En-score as Satisfactorio or No satisfactorio using the |En| <= 1 threshold from ISO 13528:2022. Scalar and vectorized variants available.'
+keywords: ['En score evaluation', 'normalized error', 'proficiency testing', 'ISO 13528', 'ptcalc']
+---
+
+`evaluate_en_score()` and `evaluate_en_score_vec()` classify En-scores against the binary performance criterion defined in ISO 13528:2022 Section 10.5. Unlike the z-score evaluation, there is no intermediate "questionable" category — an En-score is either satisfactory or unsatisfactory. The scalar function handles one value at a time; the vectorized version processes a whole vector using `dplyr::case_when()`.
+
+## Performance thresholds
+
+| Condition | Classification |
+|---|---|
+| `\|En\| <= 1` | `"Satisfactorio"` |
+| `\|En\| > 1` | `"No satisfactorio"` |
+| Not finite (`NA`, `NaN`, `Inf`) | `"N/A"` |
+
+## `evaluate_en_score(en)`
+
+Evaluates a single En-score and returns a character string.
+
+### Parameters
+
+<ParamField path="en" type="numeric" required>
+  A single En-score value. Non-finite values (`NA`, `NaN`, `Inf`, `-Inf`) return `"N/A"`.
+</ParamField>
+
+### Return value
+
+<ResponseField name="evaluation" type="character">
+  One of `"Satisfactorio"`, `"No satisfactorio"`, or `"N/A"`.
+</ResponseField>
+
+## `evaluate_en_score_vec(en)`
+
+Vectorized version of `evaluate_en_score()`. Applies the same thresholds element-wise across a numeric vector using `dplyr::case_when()`. Use this function when working with data frames or when evaluating many scores at once.
+
+### Parameters
+
+<ParamField path="en" type="numeric" required>
+  A numeric vector of En-score values. Non-finite elements return `"N/A"`.
+</ParamField>
+
+### Return value
+
+<ResponseField name="evaluations" type="character vector">
+  A character vector of the same length as `en`, with each element set to `"Satisfactorio"`, `"No satisfactorio"`, or `"N/A"`.
+</ResponseField>
+
+<Note>
+  `evaluate_en_score_vec()` requires the `dplyr` package. It is suitable for use inside `dplyr::mutate()` pipelines. For single-value lookups, prefer the scalar `evaluate_en_score()`.
+</Note>
+
+## Examples
+
+```r
+# Scalar evaluation
+evaluate_en_score(0.8)   # "Satisfactorio"   (|En| <= 1)
+evaluate_en_score(1.0)   # "Satisfactorio"   (boundary: |En| == 1)
+evaluate_en_score(1.12)  # "No satisfactorio"
+evaluate_en_score(-1.5)  # "No satisfactorio"
+evaluate_en_score(NA)    # "N/A"
+evaluate_en_score(Inf)   # "N/A"
+
+# Vectorized evaluation
+scores <- c(0.5, 1.0, 1.12, NA, -0.9)
+evaluate_en_score_vec(scores)
+# [1] "Satisfactorio"    "Satisfactorio"    "No satisfactorio" "N/A"
+# [5] "Satisfactorio"
+
+# Use inside a dplyr pipeline with calculate_en_score
+library(dplyr)
+results <- tibble(
+  x     = c(10.5, 10.8, 9.5),
+  x_pt  = 10.0,
+  U_x   = 0.4,
+  U_xpt = 0.2
+) |>
+  mutate(
+    en          = calculate_en_score(x, x_pt, U_x, U_xpt),
+    performance = evaluate_en_score_vec(en)
+  )
+results
+# # A tibble: 3 × 5
+#       x  x_pt   U_x U_xpt    en performance
+#   <dbl> <dbl> <dbl> <dbl> <dbl> <chr>
+# 1  10.5    10   0.4   0.2 1.118 No satisfactorio
+# 2  10.8    10   0.4   0.2 1.789 No satisfactorio
+# 3   9.5    10   0.4   0.2 -1.118 No satisfactorio
+```
+
+## ISO reference
+
+ISO 13528:2022, *Statistical methods for use in proficiency testing by interlaboratory comparison*, Section 10.5.
+
+## See also
+
+- [`calculate_en_score`](/reference/calculate-en-score) — compute an En-score
+- [`evaluate_z_score`](/reference/evaluate-z-score) — classify a z, z'-, or zeta-score (three-level thresholds)

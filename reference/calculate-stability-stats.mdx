@@ -1,0 +1,124 @@
+---
+title: 'calculate_stability_stats: stability ANOVA statistics'
+description: 'Compute between-sample SD and the absolute mean difference against the homogeneity baseline (diff_hom_stab) per ISO 13528:2022 Section 9.3.'
+---
+
+`calculate_stability_stats(stab_sample_data, hom_general_mean_homog, hom_stab_x_pt, hom_stab_sigma_pt)` analyses stability samples using the same ANOVA decomposition as `calculate_homogeneity_stats`. It additionally computes the absolute difference between the stability overall mean and the homogeneity overall mean (`diff_hom_stab`), which is the key quantity tested against the stability criterion per ISO 13528:2022 Section 9.3.
+
+## Parameters
+
+<ParamField path="stab_sample_data" type="matrix | data.frame" required>
+  Stability measurement data. Rows represent samples and columns represent replicates. Structure must match the homogeneity input: at least 2 rows and at least 2 columns. Data frames are coerced to a matrix internally.
+</ParamField>
+
+<ParamField path="hom_general_mean_homog" type="numeric" required>
+  Overall mean from the homogeneity study. Use the `general_mean_homog` field from the output of `calculate_homogeneity_stats`. This is the baseline against which the stability mean is compared.
+</ParamField>
+
+<ParamField path="hom_stab_x_pt" type="numeric" required>
+  Median of the first replicate column from the **homogeneity** study (not recalculated from stability data). Use the `x_pt` field from `calculate_homogeneity_stats`. This value is the reference used to compute `hom_stab_median_of_diffs`.
+</ParamField>
+
+<ParamField path="hom_stab_sigma_pt" type="numeric" required>
+  Standard deviation for proficiency assessment from the homogeneity study. Use `MADe` from `calculate_homogeneity_stats`. This value is passed through to the return list unchanged; the function does not recalculate it from stability data.
+</ParamField>
+
+## Return value
+
+Returns a named list. On validation failure only `error` is populated; on success `error` is `NULL`.
+
+<ResponseField name="g" type="integer">
+  Number of stability samples, equal to `nrow(stab_sample_data)`.
+</ResponseField>
+
+<ResponseField name="m" type="integer">
+  Number of replicates per stability sample, equal to `ncol(stab_sample_data)`.
+</ResponseField>
+
+<ResponseField name="general_mean" type="numeric">
+  Overall mean of all values in `stab_sample_data`.
+</ResponseField>
+
+<ResponseField name="sample_means" type="numeric vector">
+  Row-wise means across replicates for the stability samples.
+</ResponseField>
+
+<ResponseField name="x_pt" type="numeric">
+  Median of the first replicate column of the stability data. Calculated internally using the same formula as in `calculate_homogeneity_stats`.
+</ResponseField>
+
+<ResponseField name="s_x_bar_sq" type="numeric">
+  Variance of the stability `sample_means`.
+</ResponseField>
+
+<ResponseField name="s_xt" type="numeric">
+  Standard deviation of the stability `sample_means`.
+</ResponseField>
+
+<ResponseField name="sw" type="numeric">
+  Within-sample standard deviation for the stability data. Uses the range method when `m == 2`.
+</ResponseField>
+
+<ResponseField name="sw_sq" type="numeric">
+  Within-sample variance (`sw^2`) for the stability data.
+</ResponseField>
+
+<ResponseField name="ss_sq" type="numeric">
+  Between-sample variance component for the stability data.
+</ResponseField>
+
+<ResponseField name="ss" type="numeric">
+  Between-sample standard deviation for the stability data.
+</ResponseField>
+
+<ResponseField name="hom_stab_median_of_diffs" type="numeric">
+  Median of absolute differences between the second replicate column of `stab_sample_data` and the homogeneity `x_pt` (`hom_stab_x_pt`). This cross-study comparison uses the homogeneity reference point, not the stability `x_pt`.
+</ResponseField>
+
+<ResponseField name="hom_stab_sigma_pt" type="numeric">
+  The `hom_stab_sigma_pt` argument passed in, returned unchanged. Represents the proficiency assessment standard deviation from the homogeneity study.
+</ResponseField>
+
+<ResponseField name="diff_hom_stab" type="numeric">
+  Absolute difference between the stability overall mean and the homogeneity overall mean: `|general_mean - hom_general_mean_homog|`. Pass this to `evaluate_stability` and `calculate_u_stab`.
+</ResponseField>
+
+<ResponseField name="error" type="character | NULL">
+  `NULL` on success. Returns a descriptive error string when `g < 2` or `m < 2`.
+</ResponseField>
+
+## Notes
+
+<Info>
+  All four parameters are required. The function does not have defaults for the homogeneity inputs because stability analysis is defined relative to a specific homogeneity baseline; using the wrong baseline produces meaningless results.
+</Info>
+
+<Note>
+  `hom_stab_sigma_pt` is returned verbatim so that downstream criterion functions can access it from the stability result without needing to keep the homogeneity result in scope.
+</Note>
+
+## Example
+
+```r
+set.seed(42)
+
+# Step 1: run homogeneity study
+hom_data <- matrix(rnorm(20, mean = 10, sd = 0.5), nrow = 10, ncol = 2)
+hom      <- calculate_homogeneity_stats(hom_data)
+
+# Step 2: collect stability samples (e.g. after storage period)
+stab_data <- matrix(rnorm(16, mean = 10.05, sd = 0.5), nrow = 8, ncol = 2)
+
+stab <- calculate_stability_stats(
+  stab_sample_data      = stab_data,
+  hom_general_mean_homog = hom$general_mean_homog,
+  hom_stab_x_pt         = hom$x_pt,
+  hom_stab_sigma_pt     = hom$MADe
+)
+
+if (!is.null(stab$error)) stop(stab$error)
+
+cat("Stability overall mean:   ", round(stab$general_mean, 4), "\n")
+cat("Homogeneity overall mean: ", round(hom$general_mean_homog, 4), "\n")
+cat("|diff| (diff_hom_stab):   ", round(stab$diff_hom_stab, 4), "\n")
+```

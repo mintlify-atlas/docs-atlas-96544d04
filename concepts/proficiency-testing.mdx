@@ -1,0 +1,60 @@
+---
+title: "Proficiency testing: assigned values and sigma_pt explained"
+description: "Learn what proficiency testing is, how assigned values and sigma_pt are defined, and how ptcalc maps to ISO 13528:2022 and ISO 17043:2024 requirements."
+keywords: ["proficiency testing", "PT scheme", "assigned value", "sigma_pt", "ISO 13528", "ISO 17043"]
+---
+
+Proficiency testing (PT) is a systematic method for evaluating laboratory performance by comparing each participant's result against a reference value and against results from other participants. When you run a PT scheme, you distribute reference materials to a group of laboratories, collect their reported results, and apply statistical criteria to determine whether each participant is performing within acceptable limits.
+
+## Purpose of PT schemes
+
+PT schemes serve three interconnected goals. First, they give each participating laboratory objective evidence about the quality of its measurements — evidence that is independent of the laboratory's own internal quality controls. Second, they allow PT scheme providers to identify systematic issues across groups of laboratories, such as method biases affecting a particular technique. Third, regulators and accreditation bodies such as those operating under ISO 17043:2024 use PT results as part of the evidence base for laboratory accreditation.
+
+A PT scheme is considered fit for purpose when its assigned value is traceable (or at least demonstrably comparable) and when the standard deviation used for performance assessment, sigma_pt, reflects a realistic expectation of what a well-performing laboratory can achieve.
+
+## Assigned value (x_pt) and sigma_pt
+
+The **assigned value** (`x_pt`) is the reference result against which all participant results are compared. Depending on the PT scheme design, `x_pt` may be:
+
+- A certified reference value with documented metrological traceability
+- A consensus value derived from participant results using robust statistics (see [Algorithm A](/concepts/robust-statistics))
+- A formulated or gravimetric value prepared by the PT provider
+
+The **standard deviation for proficiency assessment** (`sigma_pt`) expresses how much dispersion is acceptable among participant results. It is not a measure of the uncertainty of the assigned value; it is a statement of the analytical performance expectation for the scheme. You set `sigma_pt` either by a prescribed fitness-for-purpose criterion, from expert judgment, or — most commonly in ptcalc workflows — from the robust spread of participant results via nIQR or MADe.
+
+<Info>
+  When `sigma_pt` is derived from participant data using robust statistics, it captures the spread of the majority of results while remaining insensitive to outliers. ptcalc provides `calculate_niqr()` and `calculate_mad_e()` for this purpose.
+</Info>
+
+## The role of ISO 13528:2022 and ISO 17043:2024
+
+**ISO 13528:2022** — *Statistical methods for use in proficiency testing by interlaboratory comparison* — is the primary technical standard for PT calculations. It specifies:
+
+- How to assess homogeneity and stability of PT materials (Sections 9.2 and 9.3)
+- Robust statistical methods for deriving assigned values and sigma_pt (Section 9.4 and Annex C.3)
+- Four score types for participant performance evaluation (Sections 10.2–10.5)
+- Criteria for classifying results as satisfactory, questionable, or unsatisfactory
+
+**ISO 17043:2024** — *Conformity assessment — General requirements for the competence of proficiency testing providers* — sets the management and technical requirements that PT providers must meet to be accredited. It references ISO 13528 for the statistical methods a provider must apply, and it defines the responsibilities of the provider, the participants, and the accreditation bodies.
+
+Together, these standards establish the framework within which ptcalc operates. ptcalc implements the statistical calculations required by ISO 13528:2022; the management and reporting obligations under ISO 17043:2024 remain the responsibility of the PT scheme operator.
+
+## How ptcalc implements these standards
+
+ptcalc exposes each calculation as a standalone pure function that returns `NA` on invalid input rather than raising an error. This makes the functions composable and safe to use inside data pipelines. The implementation is organized in three areas:
+
+<AccordionGroup>
+  <Accordion title="Robust statistics (ISO 13528:2022 Section 9.4 and Annex C.3)">
+    `calculate_niqr()` computes 0.7413 × IQR. `calculate_mad_e()` computes 1.483 × MAD. `run_algorithm_a()` implements the iterative Winsorization procedure that yields the robust assigned value (`x*`) and robust standard deviation (`s*`). All three functions strip non-finite values before computing and return `NA` when the data are insufficient.
+  </Accordion>
+  <Accordion title="Score calculations (ISO 13528:2022 Sections 10.2–10.5)">
+    `calculate_z_score()`, `calculate_z_prime_score()`, `calculate_zeta_score()`, and `calculate_en_score()` each implement one of the four ISO-standardized performance scores. Companion functions `evaluate_z_score()` and `evaluate_en_score()` return the ISO classification (satisfactory / questionable / unsatisfactory) for a given score value.
+  </Accordion>
+  <Accordion title="Homogeneity and stability (ISO 13528:2022 Sections 9.2–9.3)">
+    `calculate_homogeneity_stats()` performs the ANOVA decomposition to yield between-sample (`ss`) and within-sample (`sw`) standard deviations along with the uncertainty of sigma_pt. `calculate_stability_stats()` compares a subsequent stability study against the homogeneity baseline. Both functions feed their outputs into `evaluate_homogeneity()` and `evaluate_stability()`, which apply the 0.3 × sigma_pt criterion and its expanded form.
+  </Accordion>
+</AccordionGroup>
+
+<Tip>
+  If you are new to ptcalc, start with the [Quickstart](/quickstart) to see a complete end-to-end calculation, then return to these concept pages for deeper explanations of each area.
+</Tip>

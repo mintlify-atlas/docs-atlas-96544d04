@@ -1,0 +1,85 @@
+---
+title: 'calculate_stability_criterion: stability thresholds'
+description: 'Compute the basic stability criterion (0.3 * sigma_pt) and its expanded form adding combined mean uncertainties per ISO 13528:2022 Section 9.3.3.'
+---
+
+Two functions derive the thresholds used to accept or reject a stability study. `calculate_stability_criterion(sigma_pt)` returns the basic criterion defined in ISO 13528:2022 Section 9.3.3. `calculate_stability_criterion_expanded(c_criterion, u_hom_mean, u_stab_mean)` returns the expanded criterion, which widens the threshold by adding a combined uncertainty contribution from both the homogeneity and stability measurements.
+
+## calculate_stability_criterion
+
+Applies the formula `c_stab = 0.3 * sigma_pt`, identical in form to the homogeneity criterion.
+
+<ParamField path="sigma_pt" type="numeric" required>
+  Standard deviation for proficiency assessment. Use `hom_stab_sigma_pt` (i.e. the homogeneity `MADe`) from the output of `calculate_stability_stats`.
+</ParamField>
+
+<ResponseField name="c_stab" type="numeric">
+  Basic stability criterion. The absolute mean difference `diff_hom_stab` must not exceed this value for the lot to be considered stable under the basic criterion.
+</ResponseField>
+
+---
+
+## calculate_stability_criterion_expanded
+
+Applies the formula `c_stab_expanded = c_criterion + 2 * sqrt(u_hom_mean^2 + u_stab_mean^2)`.
+
+<ParamField path="c_criterion" type="numeric" required>
+  Basic stability criterion, as returned by `calculate_stability_criterion`.
+</ParamField>
+
+<ParamField path="u_hom_mean" type="numeric" required>
+  Standard uncertainty of the homogeneity overall mean. Typically `sw / sqrt(g * m)` for the homogeneity dataset, or a value derived from your uncertainty budget.
+</ParamField>
+
+<ParamField path="u_stab_mean" type="numeric" required>
+  Standard uncertainty of the stability overall mean. Typically `sw / sqrt(g * m)` for the stability dataset.
+</ParamField>
+
+<ResponseField name="c_stab_expanded" type="numeric">
+  Expanded stability criterion. A lot that fails the basic criterion but satisfies `diff_hom_stab <= c_stab_expanded` may still be considered stable under the expanded criterion. Pass this value as `c_expanded` to `evaluate_stability`.
+</ResponseField>
+
+## Notes
+
+<Info>
+  The expanded form uses a coverage factor of 2 (approximately 95 % confidence) applied to the combined standard uncertainty `sqrt(u_hom_mean^2 + u_stab_mean^2)`. This is added linearly to the basic criterion rather than combined in quadrature.
+</Info>
+
+<Note>
+  Unlike the expanded homogeneity criterion, the expanded stability criterion adds an absolute uncertainty term rather than multiplying by a relative factor. Ensure `u_hom_mean` and `u_stab_mean` are in the same units as the measurand.
+</Note>
+
+## Example
+
+```r
+set.seed(42)
+
+# Homogeneity study
+hom_data <- matrix(rnorm(20, mean = 10, sd = 0.5), nrow = 10, ncol = 2)
+hom      <- calculate_homogeneity_stats(hom_data)
+
+# Stability study
+stab_data <- matrix(rnorm(16, mean = 10.05, sd = 0.5), nrow = 8, ncol = 2)
+stab      <- calculate_stability_stats(
+  stab_sample_data       = stab_data,
+  hom_general_mean_homog = hom$general_mean_homog,
+  hom_stab_x_pt          = hom$x_pt,
+  hom_stab_sigma_pt      = hom$MADe
+)
+
+# Standard uncertainties of each overall mean
+u_hom_mean  <- hom$sw  / sqrt(hom$g  * hom$m)
+u_stab_mean <- stab$sw / sqrt(stab$g * stab$m)
+
+# Criteria
+c_stab     <- calculate_stability_criterion(stab$hom_stab_sigma_pt)
+c_stab_exp <- calculate_stability_criterion_expanded(
+  c_criterion  = c_stab,
+  u_hom_mean   = u_hom_mean,
+  u_stab_mean  = u_stab_mean
+)
+
+cat("Basic criterion:    ", round(c_stab, 4), "\n")
+cat("Expanded criterion: ", round(c_stab_exp, 4), "\n")
+cat("diff_hom_stab:      ", round(stab$diff_hom_stab, 4), "\n")
+```

@@ -1,0 +1,163 @@
+---
+title: 'Running ISO 13528 Algorithm A with ptcalc'
+description: 'Learn when and how to apply Algorithm A for robust mean and standard deviation estimation in proficiency testing rounds with outlier-prone data.'
+keywords: ['algorithm a', 'ISO 13528', 'robust statistics', 'proficiency testing', 'winsorization', 'ptcalc']
+---
+
+Algorithm A is ptcalc's implementation of the iterative robust estimation procedure defined in ISO 13528:2022 Annex C.3. This guide walks you through choosing Algorithm A for your round, calling `run_algorithm_a()`, reading every field in its output, and handling the edge case where the algorithm fails to converge.
+
+## When to use Algorithm A
+
+Algorithm A is the right choice when you need a robust assigned value and standard deviation that are resistant to extreme participant results. Use it when:
+
+- You have **at least 3 participants** (the function returns an error for fewer).
+- The measurement field is prone to occasional outliers or large deviations.
+- You want the assigned value and `sigma_pt` to be derived directly from the round data rather than set a priori.
+
+<Note>
+  Algorithm A requires a minimum of 3 finite observations. If your cleaned data
+  contains fewer, `run_algorithm_a()` returns `converged = FALSE` and an
+  informative `error` string — check for this before using any outputs.
+</Note>
+
+## Calling `run_algorithm_a()`
+
+The function signature is:
+
+```r
+run_algorithm_a(values, ids = NULL, max_iter = 50)
+```
+
+| Argument   | Description                                                                 |
+| ---------- | --------------------------------------------------------------------------- |
+| `values`   | Numeric vector of participant results. Non-finite values are dropped.       |
+| `ids`      | Optional character or numeric vector of participant identifiers.             |
+| `max_iter` | Maximum iterations before stopping (default `50`; rarely needs changing).   |
+
+A minimal call using only results:
+
+```r
+library(ptcalc)
+
+results <- c(10.1, 10.2, 9.9, 10.0, 10.3, 9.8, 50.0)  # 50.0 is a clear outlier
+out <- run_algorithm_a(results)
+```
+
+Passing participant IDs makes the `winsorized_values` output easier to audit:
+
+```r
+ids <- c("LAB-01", "LAB-02", "LAB-03", "LAB-04", "LAB-05", "LAB-06", "LAB-07")
+out <- run_algorithm_a(values = results, ids = ids)
+```
+
+## Inspecting the result
+
+`run_algorithm_a()` always returns a named list. The key fields are described below.
+
+### Scalar summary fields
+
+```r
+cat("Assigned value (x*):", out$assigned_value, "\n")
+cat("Robust SD (s*)     :", out$robust_sd, "\n")
+cat("Converged          :", out$converged, "\n")
+cat("Participants used  :", out$n_participants, "\n")
+```
+
+| Field            | Type      | Meaning                                                  |
+| ---------------- | --------- | -------------------------------------------------------- |
+| `assigned_value` | numeric   | Robust mean x* — use this as the round assigned value.  |
+| `robust_sd`      | numeric   | Robust standard deviation s* — use this as `sigma_pt`.  |
+| `converged`      | logical   | `TRUE` when both x* and s* stabilised to 3 sig. figs.   |
+| `n_participants` | integer   | Count of finite values actually used.                    |
+| `error`          | character | `NULL` on success; an error string on failure.           |
+
+### Iteration history
+
+The `iterations` data frame records x* and s* after every cycle, letting you verify the algorithm's path to convergence:
+
+```r
+print(out$iterations)
+#   iteration   x_star    s_star
+# 1         1 10.07143 0.2061994
+# 2         2 10.07143 0.1885843
+# 3         3 10.07143 0.1885843  # converged
+```
+
+Each row corresponds to one complete Winsorisation–update cycle. When convergence happens, the final row shows the values at which both estimates matched to three significant figures.
+
+### Winsorised values
+
+The `winsorized_values` data frame shows what each participant's result was clipped to at the final iteration:
+
+```r
+print(out$winsorized_values)
+#       id original winsorized
+# 1 LAB-01     10.1      10.10
+# 2 LAB-02     10.2      10.20
+# ...
+# 7 LAB-07     50.0      10.35  # outlier was clamped to x* + delta
+```
+
+Rows where `original != winsorized` identify participants whose results were Winsorised. You can report these to the participant as a flag.
+
+<Tip>
+  Compare `original` and `winsorized` columns to identify which laboratories
+  contributed inflated or deflated values. This is not an exclusion — it is a
+  downweighting that preserves the participant's contribution within the robust
+  bounds.
+</Tip>
+
+## A complete worked example
+
+```r
+library(ptcalc)
+
+# Dataset: seven laboratories measuring a pH buffer.
+# LAB-07 reported 50.0 — clearly an outlier in a dataset centred around 10.
+values <- c(10.1, 10.2, 9.9, 10.0, 10.3, 9.8, 50.0)
+ids    <- paste0("LAB-0", 1:7)
+
+out <- run_algorithm_a(values = values, ids = ids)
+
+# Check convergence before using results
+if (!out$converged) {
+  stop("Algorithm A did not converge: ", out$error)
+}
+
+cat("Assigned value:", round(out$assigned_value, 4), "\n")
+cat("Robust SD     :", round(out$robust_sd, 4), "\n")
+
+# Identify Winsorised participants
+wv <- out$winsorized_values
+flagged <- wv[wv$original != wv$winsorized, ]
+cat("Winsorised participants:\n")
+print(flagged)
+```
+
+Running this code produces an assigned value close to 10.07 and a robust SD around 0.19 — the outlier at 50.0 has negligible influence on either estimate.
+
+## Handling convergence failure
+
+When `out$converged` is `FALSE`, the returned `assigned_value` and `robust_sd` should **not** be used as final round statistics. Two situations trigger non-convergence:
+
+1. **Fewer than 3 valid observations** — the function returns immediately with an error.
+2. **Numerical collapse** — all Winsorised values become identical, driving s* to zero. This is rare and indicates the data contains near-duplicate values with an extreme outlier.
+
+<Warning>
+  Always check `out$converged` and `out$error` before publishing assigned
+  values. Using outputs from a non-converged run violates ISO 13528 requirements.
+</Warning>
+
+```r
+out <- run_algorithm_a(values = values, ids = ids, max_iter = 50)
+
+if (isFALSE(out$converged)) {
+  message("Algorithm A failed: ", out$error)
+  # Fallback: use median and nIQR, or request additional participant data
+} else {
+  x_pt    <- out$assigned_value
+  sigma_pt <- out$robust_sd
+}
+```
+
+If convergence is not reached within `max_iter` cycles, you can increase the limit (e.g., `max_iter = 100`), but in practice this is rarely needed for well-formed PT data.

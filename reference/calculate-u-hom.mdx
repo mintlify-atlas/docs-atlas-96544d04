@@ -1,0 +1,43 @@
+---
+title: 'calculate_u_hom: homogeneity uncertainty contribution'
+description: 'Return the standard uncertainty contribution from sample inhomogeneity (u_hom = ss) for the assigned value budget per ISO 13528:2022 Section 9.5.'
+---
+
+`calculate_u_hom(ss)` returns the standard uncertainty contribution from sample inhomogeneity to the uncertainty budget of the assigned value. Per ISO 13528:2022 Section 9.5, this contribution is set equal to the between-sample standard deviation `ss` obtained from the homogeneity study.
+
+## Parameters
+
+<ParamField path="ss" type="numeric" required>
+  Between-sample standard deviation from the homogeneity study. Retrieve this from the `ss` field in the output of `calculate_homogeneity_stats`.
+</ParamField>
+
+## Return value
+
+<ResponseField name="u_hom" type="numeric">
+  Standard uncertainty contribution from homogeneity, equal to `ss`. Combine this in quadrature with other uncertainty components (such as `u_stab`) when constructing the uncertainty budget for the assigned value.
+</ResponseField>
+
+## Notes
+
+<Info>
+  The function applies no transformation: `u_hom = ss`. Its purpose is to make the uncertainty budget calculation explicit and traceable to the standard rather than relying on inline arithmetic.
+</Info>
+
+<Note>
+  ISO 13528:2022 Section 9.5 treats inhomogeneity as a rectangular distribution with half-width `ss`, but adopts `ss` directly as the standard uncertainty component. This is consistent with treating the between-sample variation as a dominant source of uncertainty with no additional divisor applied.
+</Note>
+
+## Example
+
+```r
+set.seed(42)
+
+sample_data <- matrix(rnorm(20, mean = 10, sd = 0.5), nrow = 10, ncol = 2)
+hom         <- calculate_homogeneity_stats(sample_data)
+
+u_hom <- calculate_u_hom(hom$ss)
+cat("u_hom:", round(u_hom, 4), "\n")
+
+# Combine with u_stab in the uncertainty budget (example — u_stab computed separately)
+# u_char <- sqrt(u_hom^2 + u_stab^2)
+```

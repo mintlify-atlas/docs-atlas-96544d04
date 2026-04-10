@@ -1,0 +1,70 @@
+---
+title: 'calculate_u_stab: stability uncertainty contribution'
+description: 'Return 0 when the stability criterion is met, or diff_hom_stab / sqrt(3) when it is not — per ISO 13528:2022 Section 9.5 uncertainty budget rules.'
+---
+
+`calculate_u_stab(diff_hom_stab, c_criterion)` returns the standard uncertainty contribution from short-term instability to the uncertainty budget of the assigned value. Per ISO 13528:2022 Section 9.5, this contribution is zero when the stability criterion is met and equals `diff_hom_stab / sqrt(3)` when it is not.
+
+## Parameters
+
+<ParamField path="diff_hom_stab" type="numeric" required>
+  Absolute difference between the stability overall mean and the homogeneity overall mean. Retrieve this from the `diff_hom_stab` field in the output of `calculate_stability_stats`.
+</ParamField>
+
+<ParamField path="c_criterion" type="numeric" required>
+  Basic stability criterion. Compute this with `calculate_stability_criterion`. The function uses this value only to branch between the two cases; it does not apply the expanded criterion.
+</ParamField>
+
+## Return value
+
+<ResponseField name="u_stab" type="numeric">
+  Standard uncertainty contribution from stability:
+
+  - `0` when `diff_hom_stab <= c_criterion` (the lot is stable; no uncertainty contribution is added).
+  - `diff_hom_stab / sqrt(3)` when `diff_hom_stab > c_criterion` (the lot shows a detectable shift; the shift is modelled as a rectangular distribution with half-width `diff_hom_stab`).
+</ResponseField>
+
+## Notes
+
+<Note>
+  The divisor `sqrt(3)` converts a rectangular distribution with half-width `diff_hom_stab` to a standard uncertainty. This model assumes the true shift is equally likely to be anywhere between 0 and `diff_hom_stab`.
+</Note>
+
+<Info>
+  When stability is demonstrated (`diff_hom_stab <= c_criterion`) the function returns exactly `0`. This zero contribution should still be included in your uncertainty budget expression for transparency, even though it does not change the combined result.
+</Info>
+
+## Example
+
+```r
+set.seed(42)
+
+# Homogeneity study
+hom_data <- matrix(rnorm(20, mean = 10, sd = 0.5), nrow = 10, ncol = 2)
+hom      <- calculate_homogeneity_stats(hom_data)
+
+# Case 1: lot is stable (diff within criterion)
+stab_data_ok <- matrix(rnorm(16, mean = 10.01, sd = 0.5), nrow = 8, ncol = 2)
+stab_ok      <- calculate_stability_stats(
+  stab_sample_data       = stab_data_ok,
+  hom_general_mean_homog = hom$general_mean_homog,
+  hom_stab_x_pt          = hom$x_pt,
+  hom_stab_sigma_pt      = hom$MADe
+)
+c_stab <- calculate_stability_criterion(stab_ok$hom_stab_sigma_pt)
+
+u_stab_ok <- calculate_u_stab(stab_ok$diff_hom_stab, c_stab)
+cat("u_stab (stable lot):    ", u_stab_ok, "\n")  # 0
+
+# Case 2: lot shows a detectable shift (diff exceeds criterion)
+stab_data_shift <- matrix(rnorm(16, mean = 10.8, sd = 0.5), nrow = 8, ncol = 2)
+stab_shift      <- calculate_stability_stats(
+  stab_sample_data       = stab_data_shift,
+  hom_general_mean_homog = hom$general_mean_homog,
+  hom_stab_x_pt          = hom$x_pt,
+  hom_stab_sigma_pt      = hom$MADe
+)
+
+u_stab_shift <- calculate_u_stab(stab_shift$diff_hom_stab, c_stab)
+cat("u_stab (shifted lot):   ", round(u_stab_shift, 4), "\n")  # diff / sqrt(3)
+```

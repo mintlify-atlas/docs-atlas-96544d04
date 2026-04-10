@@ -1,0 +1,73 @@
+---
+title: 'evaluate_homogeneity: assess homogeneity pass/fail'
+description: 'Compare between-sample SD against the basic and expanded ISO 13528:2022 homogeneity criteria and return structured pass/fail flags with a conclusion string.'
+---
+
+`evaluate_homogeneity(ss, c_criterion, c_expanded)` compares the between-sample standard deviation `ss` against the homogeneity criterion and, optionally, the expanded criterion. It returns structured pass/fail flags and a formatted conclusion string suitable for reporting.
+
+## Parameters
+
+<ParamField path="ss" type="numeric" required>
+  Between-sample standard deviation from the homogeneity study. Retrieve this from the `ss` field in the output of `calculate_homogeneity_stats`.
+</ParamField>
+
+<ParamField path="c_criterion" type="numeric" required>
+  Basic homogeneity criterion. Compute this with `calculate_homogeneity_criterion`.
+</ParamField>
+
+<ParamField path="c_expanded" type="numeric">
+  Expanded homogeneity criterion (optional). When supplied the function also evaluates `ss` against this wider threshold. Compute this with `calculate_homogeneity_criterion_expanded`. Omit or pass `NULL` to skip the expanded check.
+</ParamField>
+
+## Return value
+
+Returns a named list with three fields.
+
+<ResponseField name="passes_criterion" type="logical">
+  `TRUE` if `ss <= c_criterion`, `FALSE` otherwise.
+</ResponseField>
+
+<ResponseField name="passes_expanded" type="logical | NA">
+  `TRUE` if `ss <= c_expanded`. `FALSE` if `ss > c_expanded`. `NA` when `c_expanded` is not provided.
+</ResponseField>
+
+<ResponseField name="conclusion" type="character">
+  One or two lines of human-readable text. Each line follows the pattern:
+
+  - Pass: `"ss (0.0123) <= criterion (0.0450): MEETS HOMOGENEITY CRITERION"`
+  - Fail: `"ss (0.0532) > criterion (0.0450): DOES NOT MEET HOMOGENEITY CRITERION"`
+
+  When `c_expanded` is provided a second line is appended with the same format referencing the expanded threshold. The two lines are joined with `\n`.
+</ResponseField>
+
+## Notes
+
+<Note>
+  The function applies only a less-than-or-equal comparison (`ss <= c_criterion`). There is no tolerance or rounding; pass the exact numeric values returned by the upstream functions.
+</Note>
+
+## Example
+
+```r
+set.seed(42)
+
+# Run the full homogeneity workflow
+sample_data <- matrix(rnorm(20, mean = 10, sd = 0.5), nrow = 10, ncol = 2)
+stats  <- calculate_homogeneity_stats(sample_data)
+
+c      <- calculate_homogeneity_criterion(stats$MADe)
+c_exp  <- calculate_homogeneity_criterion_expanded(
+  sigma_pt   = stats$MADe,
+  u_sigma_pt = stats$u_sigma_pt
+)
+
+result <- evaluate_homogeneity(
+  ss          = stats$ss,
+  c_criterion = c,
+  c_expanded  = c_exp
+)
+
+cat(result$conclusion, "\n")
+cat("Passes basic criterion:   ", result$passes_criterion, "\n")
+cat("Passes expanded criterion:", result$passes_expanded, "\n")
+```

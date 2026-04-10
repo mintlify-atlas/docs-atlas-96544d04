@@ -1,0 +1,165 @@
+---
+title: 'Assessing PT material stability over time with ptcalc'
+description: 'Use homogeneity study outputs as reference values, compute diff_hom_stab, and apply ISO 13528:2022 basic and expanded stability criteria with ptcalc.'
+keywords: ['stability', 'ISO 13528', 'proficiency testing', 'between-sample SD', 'diff_hom_stab', 'ptcalc', 'homogeneity reference']
+---
+
+A stability study measures the same type of proficiency testing items at a later time point and checks whether the property value has drifted relative to the homogeneity study. ptcalc implements ISO 13528:2022 Section 9.3 through `calculate_stability_stats()`, `calculate_stability_criterion()`, `calculate_stability_criterion_expanded()`, and `evaluate_stability()`. This guide shows you how to flow directly from a completed homogeneity study into a stability assessment.
+
+## Relationship between homogeneity and stability studies
+
+The stability study does not stand alone — it uses three values from the homogeneity study as fixed reference points:
+
+| Homogeneity output     | Role in stability                                                |
+| ---------------------- | ---------------------------------------------------------------- |
+| `general_mean_homog`   | Reference mean. `diff_hom_stab` measures deviation from this.   |
+| `x_pt`                 | Reference median used to compute median of absolute differences. |
+| `sigma_pt`             | Provides the 0.3 × `sigma_pt` stability criterion.              |
+
+<Info>
+  Run the homogeneity assessment first and keep its results in scope. If you run
+  homogeneity and stability in separate R sessions, save and reload the relevant
+  fields.
+</Info>
+
+## Preparing stability sample data
+
+Stability sample data follows the same matrix layout as homogeneity data — rows are samples, columns are replicates:
+
+```r
+library(ptcalc)
+
+set.seed(7)
+# 10 stability samples, 2 replicates each
+# Slight upward shift of 0.05 simulates mild drift
+stab_sample_data <- matrix(
+  rnorm(20, mean = 10.05, sd = 0.5),
+  nrow = 10,
+  ncol = 2
+)
+```
+
+## Calling `calculate_stability_stats()`
+
+Pass the stability matrix together with the three reference values from the homogeneity study:
+
+```r
+stab <- calculate_stability_stats(
+  stab_sample_data       = stab_sample_data,
+  hom_general_mean_homog = hom$general_mean_homog,  # from homogeneity study
+  hom_stab_x_pt          = hom$x_pt,
+  hom_stab_sigma_pt      = hom$sigma_pt
+)
+
+if (!is.null(stab$error)) stop(stab$error)
+```
+
+## Interpreting key outputs
+
+| Field                  | Meaning                                                                                        |
+| ---------------------- | ---------------------------------------------------------------------------------------------- |
+| `diff_hom_stab`        | `|stability_mean − homogeneity_mean|` — the primary test statistic for stability.             |
+| `ss`                   | Between-sample standard deviation within the stability batch.                                  |
+| `general_mean`         | Overall mean of all stability replicate values.                                                |
+| `hom_stab_sigma_pt`    | `sigma_pt` passed through from the homogeneity study (not recalculated).                       |
+
+```r
+cat("diff_hom_stab:", round(stab$diff_hom_stab, 4), "\n")
+cat("Stability ss  :", round(stab$ss, 4), "\n")
+cat("sigma_pt (ref):", round(stab$hom_stab_sigma_pt, 4), "\n")
+```
+
+<Tip>
+  A small `diff_hom_stab` relative to `sigma_pt` is a positive sign. A ratio
+  exceeding 0.3 (i.e., failing the basic criterion) warrants investigation into
+  storage conditions or item shelf life.
+</Tip>
+
+## Calculating the stability criterion
+
+The basic stability criterion mirrors the homogeneity criterion:
+
+```r
+c_stab <- calculate_stability_criterion(stab$hom_stab_sigma_pt)
+cat("Basic stability criterion:", round(c_stab, 4), "\n")
+```
+
+### Expanded stability criterion
+
+The expanded criterion adds a coverage interval around the difference measurement, combining the standard uncertainties of both the homogeneity and stability means:
+
+```r
+# Standard uncertainty of each mean = sw / sqrt(g * m)
+u_hom_mean  <- hom$sw  / sqrt(hom$g  * hom$m)
+u_stab_mean <- stab$sw / sqrt(stab$g * stab$m)
+
+c_stab_exp <- calculate_stability_criterion_expanded(
+  c_criterion  = c_stab,
+  u_hom_mean   = u_hom_mean,
+  u_stab_mean  = u_stab_mean
+)
+cat("Expanded stability criterion:", round(c_stab_exp, 4), "\n")
+```
+
+## Evaluating stability
+
+```r
+result <- evaluate_stability(
+  diff_hom_stab = stab$diff_hom_stab,
+  c_criterion   = c_stab,
+  c_expanded    = c_stab_exp
+)
+
+cat(result$conclusion)
+```
+
+The returned list contains:
+
+| Field              | Type    | Meaning                                                            |
+| ------------------ | ------- | ------------------------------------------------------------------ |
+| `passes_criterion` | logical | `TRUE` if `diff_hom_stab ≤ c_criterion`.                          |
+| `passes_expanded`  | logical | `TRUE` if `diff_hom_stab ≤ c_expanded` (or `NA` if not supplied). |
+| `conclusion`       | string  | Human-readable pass/fail statement for both criteria.              |
+
+## Complete worked example
+
+The example below runs a full homogeneity study first, then feeds its outputs directly into a stability study — reflecting the typical workflow in a PT scheme.
+
+```r
+library(ptcalc)
+
+# ── Homogeneity study ──────────────────────────────────────────────────────────
+set.seed(42)
+hom_data <- matrix(rnorm(20, mean = 10, sd = 0.5), nrow = 10, ncol = 2)
+
+hom <- calculate_homogeneity_stats(hom_data)
+if (!is.null(hom$error)) stop(hom$error)
+
+# ── Stability study (items measured 4 weeks later) ─────────────────────────────
+set.seed(99)
+stab_data <- matrix(rnorm(20, mean = 10.08, sd = 0.5), nrow = 10, ncol = 2)
+
+stab <- calculate_stability_stats(
+  stab_sample_data       = stab_data,
+  hom_general_mean_homog = hom$general_mean_homog,
+  hom_stab_x_pt          = hom$x_pt,
+  hom_stab_sigma_pt      = hom$sigma_pt
+)
+if (!is.null(stab$error)) stop(stab$error)
+
+# ── Criteria ───────────────────────────────────────────────────────────────────
+c_stab     <- calculate_stability_criterion(stab$hom_stab_sigma_pt)
+u_hom_mean  <- hom$sw  / sqrt(hom$g  * hom$m)
+u_stab_mean <- stab$sw / sqrt(stab$g * stab$m)
+c_stab_exp  <- calculate_stability_criterion_expanded(c_stab, u_hom_mean, u_stab_mean)
+
+# ── Evaluation ────────────────────────────────────────────────────────────────
+result <- evaluate_stability(stab$diff_hom_stab, c_stab, c_stab_exp)
+cat(result$conclusion, "\n")
+```
+
+<Warning>
+  If the items fail both the basic and expanded stability criteria, do not
+  dispatch them to participants. Investigate storage temperature, packaging, or
+  matrix instability, and re-run the stability study after corrective action.
+</Warning>

@@ -1,0 +1,108 @@
+---
+title: "ptcalc: R package for ISO proficiency testing statistics"
+description: "ptcalc implements ISO 13528:2022 and ISO 17043:2024 calculations for PT schemes: robust statistics, z/zeta/En scores, and homogeneity/stability assessment."
+keywords: ["ptcalc", "proficiency testing", "ISO 13528", "ISO 17043", "R package", "robust statistics"]
+---
+
+ptcalc is an R package that implements the statistical methods defined in ISO 13528:2022 and ISO 17043:2024 for proficiency testing (PT) schemes. It gives PT coordinators and metrologists a set of pure, dependency-light functions for computing robust assigned values, evaluating participant performance through four score types, and assessing the homogeneity and stability of test items before a round begins.
+
+## What problems ptcalc solves
+
+Proficiency testing programs require calculations that go beyond what base R provides out of the box. Coordinators need outlier-resistant estimators that follow a specific iterative algorithm, score formulas that account for measurement uncertainty, and ANOVA-based homogeneity criteria that must match ISO text exactly. Writing these correctly from scratch is error-prone, and getting them wrong affects participant evaluations.
+
+ptcalc packages these calculations as tested, documented functions so you can focus on running your PT scheme rather than re-implementing ISO formulas.
+
+<Note>
+  ptcalc was developed under contract OSE-282-3065-2025 for Universidad Nacional de Colombia (Laboratorio CALAIRE) and Instituto Nacional de Metrología. All calculations follow the normative text of the respective standards.
+</Note>
+
+## ISO standards implemented
+
+ptcalc implements methods from two standards:
+
+**ISO 13528:2022** — *Statistical methods for use in proficiency testing by interlaboratory comparison* — is the primary technical reference. ptcalc covers:
+- Annex C.3 (Algorithm A, iterative Winsorization)
+- Section 9.2 (homogeneity assessment)
+- Section 9.3 (stability assessment)
+- Section 9.4 (nIQR and MADe robust estimators)
+- Sections 10.2–10.5 (z, z′, zeta, and En score calculations)
+
+**ISO 17043:2024** — *Conformity assessment — General requirements for proficiency testing* — defines the overall framework for PT schemes. ptcalc's score evaluation thresholds and uncertainty propagation align with its requirements.
+
+## Capability areas
+
+ptcalc's exported functions are organized around three areas:
+
+<CardGroup cols={3}>
+  <Card title="Robust statistics" icon="shield-halved">
+    `calculate_niqr()`, `calculate_mad_e()`, and `run_algorithm_a()` provide outlier-resistant estimates of location and scale. Algorithm A iteratively Winsorizes participant data until the mean and standard deviation converge to three significant figures.
+  </Card>
+  <Card title="Score calculations" icon="calculator">
+    `calculate_z_score()`, `calculate_z_prime_score()`, `calculate_zeta_score()`, and `calculate_en_score()` cover the four ISO 13528 performance score formulas. Evaluation functions classify results as satisfactory, questionable, or unsatisfactory.
+  </Card>
+  <Card title="Homogeneity & stability" icon="vials">
+    `calculate_homogeneity_stats()`, `evaluate_homogeneity()`, `calculate_stability_stats()`, and `evaluate_stability()` implement the ANOVA-based workflow for verifying that PT items are sufficiently uniform and stable before distribution.
+  </Card>
+</CardGroup>
+
+## Design principles
+
+Every function in ptcalc follows a consistent set of rules:
+
+- **Pure functions.** No side effects, no global state, no Shiny or GUI dependencies. Pass in data, get back a value or list.
+- **NA propagation.** Invalid inputs (non-finite numbers, zero denominators, insufficient sample sizes) return `NA` or a list with an `error` field rather than throwing an error that interrupts your analysis.
+- **Vectorized variants.** Score evaluation functions come in both scalar (`evaluate_z_score()`) and vectorized (`evaluate_z_score_vec()`) forms for use in data frames or `lapply` workflows.
+- **Minimal dependencies.** ptcalc imports only `stats` (base R) and `dplyr`.
+
+## Full list of exported functions
+
+<AccordionGroup>
+  <Accordion title="Robust statistics (3 functions)">
+    | Function | Description |
+    |---|---|
+    | `calculate_niqr(x)` | Normalized IQR: 0.7413 × IQR |
+    | `calculate_mad_e(x)` | Scaled MAD: 1.483 × MAD |
+    | `run_algorithm_a(values, ids, max_iter)` | ISO 13528 Annex C.3 iterative robust mean and SD |
+  </Accordion>
+  <Accordion title="Score calculations (4 functions)">
+    | Function | Formula |
+    |---|---|
+    | `calculate_z_score(x, x_pt, sigma_pt)` | z = (x − x_pt) / σ_pt |
+    | `calculate_z_prime_score(x, x_pt, sigma_pt, u_xpt)` | z′ = (x − x_pt) / √(σ_pt² + u_xpt²) |
+    | `calculate_zeta_score(x, x_pt, u_x, u_xpt)` | ζ = (x − x_pt) / √(u_x² + u_xpt²) |
+    | `calculate_en_score(x, x_pt, U_x, U_xpt)` | En = (x − x_pt) / √(U_x² + U_xpt²) |
+  </Accordion>
+  <Accordion title="Score evaluation (4 functions)">
+    | Function | Description |
+    |---|---|
+    | `evaluate_z_score(z)` | Classifies a single z, z′, or zeta score |
+    | `evaluate_z_score_vec(z)` | Vectorized classification for a score vector |
+    | `evaluate_en_score(en)` | Classifies a single En score |
+    | `evaluate_en_score_vec(en)` | Vectorized classification for an En score vector |
+  </Accordion>
+  <Accordion title="Homogeneity & stability (10 functions)">
+    | Function | Description |
+    |---|---|
+    | `calculate_homogeneity_stats(sample_data)` | Between- and within-sample statistics (ANOVA) |
+    | `calculate_homogeneity_criterion(sigma_pt)` | Basic criterion: 0.3 × σ_pt |
+    | `calculate_homogeneity_criterion_expanded(sigma_pt, u_sigma_pt)` | Expanded criterion with uncertainty |
+    | `evaluate_homogeneity(ss, c_criterion, c_expanded)` | Compare ss against homogeneity criteria |
+    | `calculate_stability_stats(stab_data, hom_mean, hom_x_pt, hom_sigma_pt)` | Stability statistics relative to homogeneity study |
+    | `calculate_stability_criterion(sigma_pt)` | Stability criterion: 0.3 × σ_pt |
+    | `calculate_stability_criterion_expanded(c_criterion, u_hom_mean, u_stab_mean)` | Expanded stability criterion |
+    | `evaluate_stability(diff_hom_stab, c_criterion, c_expanded)` | Compare mean difference against stability criteria |
+    | `calculate_u_hom(ss)` | Uncertainty contribution from homogeneity |
+    | `calculate_u_stab(diff_hom_stab, c_criterion)` | Uncertainty contribution from stability |
+  </Accordion>
+</AccordionGroup>
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Installation" icon="download" href="/installation">
+    Install ptcalc from source using devtools and verify the package loads correctly.
+  </Card>
+  <Card title="Quickstart" icon="rocket" href="/quickstart">
+    Run Algorithm A, compute a z-score, and evaluate your first participant result.
+  </Card>
+</CardGroup>

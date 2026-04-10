@@ -1,0 +1,89 @@
+---
+title: 'calculate_en_score: compute an En-score'
+description: 'Compute a normalized error (En) score using participant and assigned-value expanded uncertainties (k=2) in quadrature, per ISO 13528:2022 Section 10.5.'
+keywords: ['En score', 'normalized error', 'expanded uncertainty', 'ISO 13528', 'ptcalc']
+---
+
+`calculate_en_score()` computes the En-score (normalized error) defined in ISO 13528:2022 Section 10.5. It is structurally identical to the zeta-score formula but uses **expanded uncertainties** (`U_x`, `U_xpt`) rather than standard uncertainties. Expanded uncertainties are typically reported at a coverage factor of k=2, corresponding to approximately 95% confidence for a normal distribution. Use this function when participants and the proficiency testing provider both report expanded uncertainties.
+
+## Formula
+
+```
+En = (x - x_pt) / sqrt(U_x^2 + U_xpt^2)
+```
+
+## Expanded vs standard uncertainty
+
+Standard uncertainty (`u`) represents one standard deviation. Expanded uncertainty (`U`) is obtained by multiplying the standard uncertainty by a coverage factor `k`:
+
+```
+U = k * u    (typically k = 2)
+```
+
+Because `k` appears in both the numerator and denominator of the En formula (through `U_x` and `U_xpt`), En is dimensionally equivalent to a ratio — but the absolute magnitudes differ from the zeta-score unless both parties use the same coverage factor.
+
+<Note>
+  Mixing standard and expanded uncertainties in the same call will produce an incorrect score. Confirm that both `U_x` and `U_xpt` use the same coverage factor before calling this function.
+</Note>
+
+## Parameters
+
+<ParamField path="x" type="numeric" required>
+  Participant result. The measurement value reported by the laboratory.
+</ParamField>
+
+<ParamField path="x_pt" type="numeric" required>
+  Assigned value. The reference value for the proficiency test round.
+</ParamField>
+
+<ParamField path="U_x" type="numeric" required>
+  Expanded uncertainty of the participant result. Typically reported at coverage factor k=2 (~95% confidence). Must be a positive finite number to produce a valid score.
+</ParamField>
+
+<ParamField path="U_xpt" type="numeric" required>
+  Expanded uncertainty of the assigned value. Must use the same coverage factor as `U_x`.
+</ParamField>
+
+## Return value
+
+<ResponseField name="en" type="numeric">
+  The En-score as a single numeric value. Returns `NA` (typed as `NA_real_`) when the computed denominator `sqrt(U_x^2 + U_xpt^2)` is not finite or is less than or equal to zero.
+</ResponseField>
+
+## Example
+
+```r
+# Expanded uncertainties at k=2
+en <- calculate_en_score(
+  x     = 10.5,
+  x_pt  = 10.0,
+  U_x   = 0.4,
+  U_xpt = 0.2
+)
+cat("En-score:", en)
+# Denominator: sqrt(0.4^2 + 0.2^2) = sqrt(0.20) ≈ 0.4472
+# En ≈ 0.5 / 0.4472 ≈ 1.118
+
+# Evaluate the result
+evaluate_en_score(en)  # "No satisfactorio" (|En| > 1)
+
+# Convert standard uncertainties to expanded (k=2) before calling
+u_x   <- 0.2
+u_xpt <- 0.1
+en_from_std <- calculate_en_score(
+  x     = 10.5,
+  x_pt  = 10.0,
+  U_x   = 2 * u_x,
+  U_xpt = 2 * u_xpt
+)
+cat("En from standard uncertainties (k=2):", en_from_std)
+```
+
+## ISO reference
+
+ISO 13528:2022, *Statistical methods for use in proficiency testing by interlaboratory comparison*, Section 10.5.
+
+## See also
+
+- [`calculate_zeta_score`](/reference/calculate-zeta-score) — same formula using standard uncertainties
+- [`evaluate_en_score`](/reference/evaluate-en-score) — classifies an En-score as satisfactory or unsatisfactory

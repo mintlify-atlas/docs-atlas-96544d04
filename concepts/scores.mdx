@@ -1,0 +1,130 @@
+---
+title: "z, z-prime, zeta, and En scores: choosing the right type"
+description: "Compare all four ISO 13528:2022 performance score types for PT participant evaluation: formulas, denominator differences, and classification thresholds."
+keywords: ["z-score", "z-prime score", "zeta score", "En score", "proficiency testing scores", "ISO 13528", "performance evaluation"]
+---
+
+A performance score tells you — and the PT scheme participant — how far a reported result deviates from the assigned value, expressed in units of an appropriate standard deviation or uncertainty. The four score types in ptcalc differ only in what quantity fills the denominator, and that choice reflects what you know about the uncertainty in both the assigned value and the participant's result. All four are defined in ISO 13528:2022 Sections 10.2–10.5.
+
+## z-score
+
+**Formula:** z = (x − x_pt) / sigma_pt
+
+The z-score is the simplest and most widely used performance score. You divide the difference between the participant result and the assigned value by sigma_pt — the standard deviation for proficiency assessment. Because sigma_pt is set by the PT provider and does not change from participant to participant, z-scores are directly comparable across all participants in the same round.
+
+**When to use it:** Use the z-score when you have a reliable sigma_pt and when the uncertainty of the assigned value is small relative to sigma_pt. This is the default score for most PT schemes.
+
+**Example:**
+
+```r
+# Participant reports 10.5; assigned value is 10.0 with sigma_pt = 0.5
+z <- calculate_z_score(x = 10.5, x_pt = 10.0, sigma_pt = 0.5)
+cat("z =", z)                    # z = 1
+cat("Evaluation:", evaluate_z_score(z))  # Satisfactorio
+```
+
+A z-score of 1.0 means the participant's result is exactly one sigma_pt above the assigned value — well within the satisfactory zone.
+
+## z'-score (z-prime)
+
+**Formula:** z' = (x − x_pt) / sqrt(sigma_pt² + u_xpt²)
+
+The z'-score modifies the z-score denominator to include `u_xpt`, the standard uncertainty of the assigned value. When the assigned value is itself uncertain — for example, when it comes from a consensus calculation with a finite number of participants — ignoring that uncertainty makes the score appear more precise than it really is. Adding `u_xpt²` in quadrature inflates the denominator slightly, so borderline cases are less likely to be misclassified.
+
+**When to use it:** Use the z'-score when the assigned value carries non-negligible uncertainty, such as when it comes from a robust consensus with a small number of participants. ISO 13528:2022 Section 10.3 recommends this score in those circumstances.
+
+**Example:**
+
+```r
+# Same participant, but assigned value has standard uncertainty u_xpt = 0.1
+zprime <- calculate_z_prime_score(
+  x = 10.5, x_pt = 10.0, sigma_pt = 0.5, u_xpt = 0.1
+)
+cat("z' =", zprime)  # z' = 0.981 — slightly smaller than z = 1.0
+```
+
+The evaluation thresholds for z' are the same as for z: satisfactory if |z'| ≤ 2, questionable if 2 < |z'| < 3, unsatisfactory if |z'| ≥ 3.
+
+## zeta-score
+
+**Formula:** zeta = (x − x_pt) / sqrt(u_x² + u_xpt²)
+
+The zeta-score replaces sigma_pt entirely with the participant's own stated standard uncertainty `u_x`, combined in quadrature with the standard uncertainty of the assigned value `u_xpt`. This score evaluates whether the deviation between the participant's result and the assigned value is consistent with the uncertainties that the participant and the PT provider have each declared.
+
+**When to use it:** Use the zeta-score when participants report their measurement uncertainty alongside their result, and when you want to assess whether a participant's uncertainty claim is credible relative to the deviation observed. A large positive zeta-score may indicate that a participant has underestimated their uncertainty. ISO 13528:2022 Section 10.4 covers this score.
+
+**Example:**
+
+```r
+# Participant reports 10.5 with standard uncertainty u_x = 0.2
+zeta <- calculate_zeta_score(
+  x = 10.5, x_pt = 10.0, u_x = 0.2, u_xpt = 0.1
+)
+cat("zeta =", zeta)                    # zeta = 2.236
+cat("Evaluation:", evaluate_z_score(zeta))  # Cuestionable
+```
+
+Because the denominator is built from stated uncertainties rather than a fixed sigma_pt, different participants in the same round can have different denominators and therefore non-comparable zeta-scores.
+
+## En-score
+
+**Formula:** En = (x − x_pt) / sqrt(U_x² + U_xpt²)
+
+The En-score uses **expanded** uncertainties — typically at coverage factor k = 2, corresponding to approximately 95 % coverage — rather than standard uncertainties. `U_x` is the participant's expanded uncertainty and `U_xpt` is the expanded uncertainty of the assigned value. The En-score is common in calibration laboratory PT schemes where expanded uncertainties are the standard way to express measurement capability.
+
+**When to use it:** Use the En-score for calibration PT schemes where participants report expanded uncertainties. ISO 13528:2022 Section 10.5 specifies this score. Note that En uses a different evaluation threshold from the z-type scores.
+
+**Example:**
+
+```r
+# Participant reports 10.5 with expanded uncertainty U_x = 0.4 (k=2)
+# Assigned value has expanded uncertainty U_xpt = 0.2
+en <- calculate_en_score(
+  x = 10.5, x_pt = 10.0, U_x = 0.4, U_xpt = 0.2
+)
+cat("En =", en)                    # En = 1.118
+cat("Evaluation:", evaluate_en_score(en))  # No satisfactorio
+```
+
+## Evaluation thresholds
+
+<AccordionGroup>
+  <Accordion title="z-score, z'-score, and zeta-score thresholds">
+    All three z-type scores share the same ISO 13528:2022 classification boundaries:
+
+    | Condition | Classification |
+    |---|---|
+    | \|z\| ≤ 2 | Satisfactory |
+    | 2 < \|z\| < 3 | Questionable |
+    | \|z\| ≥ 3 | Unsatisfactory |
+
+    Use `evaluate_z_score()` for scalar input or `evaluate_z_score_vec()` for a vector of scores.
+  </Accordion>
+  <Accordion title="En-score threshold">
+    The En-score uses a single boundary because expanded uncertainties already incorporate a coverage factor:
+
+    | Condition | Classification |
+    |---|---|
+    | \|En\| ≤ 1 | Satisfactory |
+    | \|En\| > 1 | Unsatisfactory |
+
+    There is no "questionable" zone for En. Use `evaluate_en_score()` for scalar input or `evaluate_en_score_vec()` for a vector.
+  </Accordion>
+</AccordionGroup>
+
+<Note>
+  All four score functions return `NA` rather than an error when the denominator is zero or non-finite. Always check for `NA` before passing scores to the evaluation functions.
+</Note>
+
+## Choosing the right score
+
+| Score | Denominator | Use when |
+|---|---|---|
+| z | sigma_pt | Assigned value uncertainty is small; you have a reliable sigma_pt |
+| z' | sqrt(sigma_pt² + u_xpt²) | Assigned value has significant uncertainty |
+| zeta | sqrt(u_x² + u_xpt²) | Participants report standard uncertainties |
+| En | sqrt(U_x² + U_xpt²) | Participants report expanded uncertainties (calibration PT) |
+
+<Tip>
+  If participants do not report uncertainties, z or z' are your only options. If they do report uncertainties, run both z and zeta so you can separately assess performance against sigma_pt and against the participants' own stated capabilities.
+</Tip>

@@ -1,0 +1,164 @@
+---
+title: 'Calculating and evaluating PT participant scores'
+description: 'Choose the right ISO 13528 score type, compute z, z-prime, zeta, and En scores with ptcalc, and batch-evaluate participant results against performance criteria.'
+keywords: ['z-score', 'z-prime score', 'zeta score', 'En score', 'proficiency testing', 'ISO 13528', 'ptcalc', 'score evaluation']
+---
+
+ptcalc implements all four score types defined in ISO 13528:2022 — z, z′, zeta, and En — plus single-value and vectorised evaluation functions that classify each score as satisfactory, questionable, or unsatisfactory. This guide covers how to choose the appropriate score, compute it, and evaluate it for every participant in your round.
+
+## Choosing the right score type
+
+The score type you use depends on what uncertainty information is available and whether it comes from the participant or from the round design.
+
+| Score   | Formula                                          | Use when                                                                          |
+| ------- | ------------------------------------------------ | --------------------------------------------------------------------------------- |
+| z       | `(x - x_pt) / sigma_pt`                         | `sigma_pt` is prescribed or derived from the round; participant uncertainty unknown. |
+| z′      | `(x - x_pt) / sqrt(sigma_pt² + u_xpt²)`         | The assigned value carries a standard uncertainty that should broaden the denominator. |
+| zeta    | `(x - x_pt) / sqrt(u_x² + u_xpt²)`              | Both participant and assigned-value standard uncertainties are available.         |
+| En      | `(x - x_pt) / sqrt(U_x² + U_xpt²)`              | Expanded uncertainties (coverage factor k = 2) are available for both parties.   |
+
+<Info>
+  The z-score is the most common choice for large PT rounds. Use zeta or En only
+  when participants report calibrated uncertainties alongside their results.
+</Info>
+
+## Calculating a z-score
+
+```r
+library(ptcalc)
+
+# Participant reported 10.5; assigned value is 10.0; sigma_pt is 0.5
+z <- calculate_z_score(x = 10.5, x_pt = 10.0, sigma_pt = 0.5)
+cat("z-score:", z)
+# z-score: 1
+```
+
+`calculate_z_score()` returns `NA_real_` when `sigma_pt` is zero or non-finite, so validate your inputs before passing them in.
+
+## Calculating a z′-score
+
+The z′-score widens the denominator by including the standard uncertainty of the assigned value `u_xpt`. This is appropriate when the assigned value was determined by a reference laboratory whose measurement uncertainty is known.
+
+```r
+# Same result and assigned value; assigned value has u_xpt = 0.1
+zprime <- calculate_z_prime_score(
+  x      = 10.5,
+  x_pt   = 10.0,
+  sigma_pt = 0.5,
+  u_xpt  = 0.1
+)
+cat("z'-score:", zprime)
+# z'-score: 0.9806
+```
+
+The denominator becomes `sqrt(0.5² + 0.1²) ≈ 0.510`, slightly larger than `sigma_pt` alone, which makes the z′-score marginally smaller in absolute value than the plain z-score.
+
+## Calculating a zeta-score
+
+Use the zeta-score when participants report a standard uncertainty `u_x` alongside their result and the assigned value also carries `u_xpt`. Neither `sigma_pt` nor expanded uncertainties are involved.
+
+```r
+zeta <- calculate_zeta_score(
+  x    = 10.5,
+  x_pt = 10.0,
+  u_x  = 0.2,
+  u_xpt = 0.1
+)
+cat("zeta-score:", zeta)
+# zeta-score: 2.236
+```
+
+<Warning>
+  The zeta- and En-score denominators are built from participant-reported
+  uncertainties. Ensure these have been validated against the participant's
+  calibration records before publishing results.
+</Warning>
+
+## Calculating an En-score
+
+The En-score uses **expanded** uncertainties (typically at k = 2, 95 % coverage) rather than standard uncertainties. It is common in key comparisons and bilateral comparison rounds.
+
+```r
+en <- calculate_en_score(
+  x    = 10.5,
+  x_pt = 10.0,
+  U_x  = 0.4,
+  U_xpt = 0.2
+)
+cat("En-score:", en)
+# En-score: 1.118
+```
+
+## Evaluating a single result
+
+### z-score evaluation
+
+`evaluate_z_score()` applies the ISO 13528 three-tier classification:
+
+| |z\|| Result              |
+| --------- | ------------------- |
+| ≤ 2       | Satisfactorio       |
+| 2 < \|z\| < 3 | Cuestionable    |
+| ≥ 3       | No satisfactorio    |
+
+```r
+evaluate_z_score(1.0)   # "Satisfactorio"
+evaluate_z_score(2.5)   # "Cuestionable"
+evaluate_z_score(3.2)   # "No satisfactorio"
+evaluate_z_score(NA)    # "N/A"
+```
+
+The same function works for z′- and zeta-scores because all three share the same |z| ≤ 2 / |z| < 3 / |z| ≥ 3 thresholds.
+
+### En-score evaluation
+
+En uses a single threshold at ±1:
+
+| |En\|| Result           |
+| -------- | ---------------- |
+| ≤ 1      | Satisfactorio    |
+| > 1      | No satisfactorio |
+
+```r
+evaluate_en_score(0.8)  # "Satisfactorio"
+evaluate_en_score(1.2)  # "No satisfactorio"
+```
+
+## Batch evaluation with vectors
+
+When processing a full round you will have a vector of scores to evaluate at once. Use the vectorised variants to avoid a loop.
+
+```r
+# Round with eight participants
+results  <- c(10.5, 9.8, 10.1, 11.2, 9.5, 10.0, 12.5, 10.3)
+x_pt     <- 10.0
+sigma_pt <- 0.5
+
+z_scores <- calculate_z_score(results, x_pt, sigma_pt)
+labels   <- evaluate_z_score_vec(z_scores)
+
+data.frame(result = results, z = round(z_scores, 2), evaluation = labels)
+#   result    z        evaluation
+# 1   10.5  1.00     Satisfactorio
+# 2    9.8 -0.40     Satisfactorio
+# 3   10.1  0.20     Satisfactorio
+# 4   11.2  2.40      Cuestionable
+# 5    9.5 -1.00     Satisfactorio
+# 6   10.0  0.00     Satisfactorio
+# 7   12.5  5.00  No satisfactorio
+# 8   10.3  0.60     Satisfactorio
+```
+
+For En-scores in batch mode:
+
+```r
+en_scores <- calculate_en_score(results, x_pt, U_x = 0.4, U_xpt = 0.2)
+en_labels <- evaluate_en_score_vec(en_scores)
+```
+
+<Tip>
+  `evaluate_z_score_vec()` and `evaluate_en_score_vec()` both return a character
+  vector of the same length as the input, making them straightforward to attach
+  as a column to a participant data frame with `dplyr::mutate()` or
+  `cbind()`.
+</Tip>

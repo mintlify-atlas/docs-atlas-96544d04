@@ -1,0 +1,63 @@
+---
+title: 'calculate_homogeneity_criterion: homogeneity thresholds'
+description: 'Compute the basic homogeneity criterion (0.3 * sigma_pt) and the expanded form accounting for u_sigma_pt uncertainty, per ISO 13528:2022 Sections 9.2.3-9.2.4.'
+---
+
+Two functions derive the thresholds used to accept or reject a homogeneity study. `calculate_homogeneity_criterion(sigma_pt)` returns the basic criterion defined in ISO 13528:2022 Section 9.2.3. `calculate_homogeneity_criterion_expanded(sigma_pt, u_sigma_pt)` returns the expanded criterion from Section 9.2.4, which widens the threshold to account for the uncertainty of `sigma_pt` itself.
+
+## calculate_homogeneity_criterion
+
+Applies the formula `c = 0.3 * sigma_pt` directly.
+
+<ParamField path="sigma_pt" type="numeric" required>
+  Standard deviation for proficiency assessment. Use `MADe` from the output of `calculate_homogeneity_stats`.
+</ParamField>
+
+<ResponseField name="c" type="numeric">
+  Homogeneity criterion. The between-sample standard deviation `ss` must not exceed this value for the lot to be considered homogeneous under the basic criterion.
+</ResponseField>
+
+---
+
+## calculate_homogeneity_criterion_expanded
+
+Applies the formula `c_expanded = c * sqrt(1 + (u_sigma_pt / sigma_pt)^2)`, where `c = 0.3 * sigma_pt`.
+
+<ParamField path="sigma_pt" type="numeric" required>
+  Standard deviation for proficiency assessment (`MADe` from `calculate_homogeneity_stats`).
+</ParamField>
+
+<ParamField path="u_sigma_pt" type="numeric" required>
+  Standard uncertainty of `sigma_pt`. Available as `u_sigma_pt` in the output of `calculate_homogeneity_stats`.
+</ParamField>
+
+<ResponseField name="c_expanded" type="numeric">
+  Expanded homogeneity criterion. A lot that fails the basic criterion but satisfies `ss <= c_expanded` is still considered acceptable under the expanded criterion. Pass this value as the `c_expanded` argument to `evaluate_homogeneity`.
+</ResponseField>
+
+## Notes
+
+<Info>
+  The expanded criterion is wider than the basic criterion because it propagates the relative uncertainty `u_sigma_pt / sigma_pt` into the threshold. When `u_sigma_pt` is zero the two criteria are identical.
+</Info>
+
+## Example
+
+```r
+set.seed(42)
+
+sample_data <- matrix(rnorm(20, mean = 10, sd = 0.5), nrow = 10, ncol = 2)
+stats <- calculate_homogeneity_stats(sample_data)
+
+# Basic criterion
+c <- calculate_homogeneity_criterion(stats$MADe)
+cat("Criterion (c):          ", round(c, 4), "\n")
+
+# Expanded criterion
+c_expanded <- calculate_homogeneity_criterion_expanded(
+  sigma_pt  = stats$MADe,
+  u_sigma_pt = stats$u_sigma_pt
+)
+cat("Expanded criterion:     ", round(c_expanded, 4), "\n")
+cat("Between-sample SD (ss):", round(stats$ss, 4), "\n")
+```

@@ -1,0 +1,114 @@
+---
+title: "Robust statistics for proficiency testing"
+description: "Understand why classical mean and SD fail with PT outliers, and how nIQR, MADe, and Algorithm A provide resistant estimates per ISO 13528:2022."
+keywords: ["robust statistics", "Algorithm A", "nIQR", "MADe", "ISO 13528", "Winsorization", "outliers"]
+---
+
+In proficiency testing you collect results from many independent laboratories, each with its own methods, equipment, and operators. A small number of those results will almost always be far from the consensus, either because a laboratory made a procedural error or because it uses a fundamentally different method. If you compute the classical mean and standard deviation across all results, those outliers pull both statistics toward them — inflating the spread and shifting the location estimate away from the true consensus. Robust statistics solve this problem by giving little or no weight to extreme values.
+
+## Why classical mean and SD are sensitive to PT outliers
+
+The classical mean minimizes the sum of squared deviations, which means a single very large or very small value can dominate the result. For a typical PT round with 20–30 participants and one or two outliers at three to five times the consensus spread, the classical SD can be two to three times larger than the spread of the majority. When you use that inflated SD as sigma_pt, nearly all participants appear satisfactory — the score loses its ability to distinguish good performance from poor performance.
+
+Robust estimators, by contrast, derive their sensitivity from the middle of the distribution. They are calibrated so that for perfectly normal data they give the same answer as the classical estimators, but they degrade gracefully as the proportion of outliers grows.
+
+## nIQR: normalized interquartile range
+
+The normalized IQR is defined as:
+
+nIQR = 0.7413 × IQR
+
+where IQR is the difference between the 75th and 25th percentiles of the data. The factor 0.7413 is chosen so that nIQR equals the population standard deviation σ for a normal distribution. You can verify this: for a standard normal distribution, Q3 − Q1 ≈ 1.3490, and 0.7413 × 1.3490 ≈ 1.000.
+
+Use nIQR when:
+
+- You want a quick, single-pass estimate of spread without iteration
+- The dataset has at most about 25 % outliers (the breakdown point of the IQR is 25 %)
+- You need an initial value of sigma_pt before running Algorithm A
+
+ISO 13528:2022 Section 9.4 lists nIQR as one of the recommended robust scale estimators. In ptcalc, `calculate_niqr()` implements this formula:
+
+```r
+values <- c(10.1, 10.2, 9.9, 10.0, 10.3, 9.8, 10.1)
+calculate_niqr(values)
+# [1] 0.1853
+```
+
+The function returns `NA` when fewer than two finite values are present.
+
+## MADe: scaled median absolute deviation
+
+The scaled MAD is defined as:
+
+MADe = 1.483 × MAD
+
+where MAD = median(|x_i − median(x)|). The factor 1.483 is again chosen for consistency with the normal distribution: for a standard normal, MAD = 0.6745, and 1.483 × 0.6745 ≈ 1.000.
+
+MADe has a higher breakdown point than nIQR — it remains valid even when up to 50 % of observations are outliers — making it the more resistant of the two estimators. It is also used as the starting estimate for Algorithm A.
+
+```r
+values <- c(10.1, 10.2, 9.9, 10.0, 50.0)  # 50.0 is an outlier
+calculate_mad_e(values)
+# [1] 0.1483  # Unaffected by the outlier at 50.0
+```
+
+ISO 13528:2022 Section 9.4 specifies both nIQR and MADe as suitable robust scale estimators. When you call `run_algorithm_a()`, ptcalc initializes `s*` using the MADe formula internally before beginning iteration.
+
+## Algorithm A: iterative Winsorization
+
+Algorithm A (ISO 13528:2022 Annex C.3) is an iterative procedure that refines both the location estimate (`x*`) and scale estimate (`s*`) simultaneously. It works by Winsorizing the data — clamping extreme values to a symmetric interval around the current estimate — and then recomputing the mean and a scaled standard deviation from the Winsorized values.
+
+### Steps
+
+The algorithm proceeds as follows on each iteration:
+
+1. Compute δ = 1.5 × s*
+2. Replace each value x_i with max(x* − δ, min(x_i, x* + δ)) — this is the Winsorization step
+3. Update x* = mean of the Winsorized values
+4. Update s* = 1.134 × sqrt( Σ(w_i − x*)² / (p − 1) ), where w_i are the Winsorized values and p is the number of participants
+5. Check convergence: if both x* and s* are unchanged to three significant figures, stop; otherwise go to step 1
+
+The scale factor 1.134 compensates for the variance lost by clamping, keeping s* consistent with the population standard deviation for normal data.
+
+### Convergence criterion
+
+ptcalc checks convergence by comparing `signif(x_old, 3) == signif(x_new, 3)` and `signif(s_old, 3) == signif(s_new, 3)`. Both conditions must hold simultaneously. The algorithm stops without declaring convergence if 50 iterations (the default `max_iter`) elapse without meeting this criterion.
+
+<Warning>
+  If `converged` is `FALSE` in the output, the assigned value and robust SD are still the best estimates available after `max_iter` iterations, but you should inspect the iteration history to understand why the algorithm did not settle.
+</Warning>
+
+### Initialization and the zero-dispersion case
+
+The algorithm initializes x* as the sample median and s* as the MADe of the data. If MADe is zero (all values are identical), ptcalc falls back to the classical sample standard deviation. If that is also zero, the algorithm returns immediately with `robust_sd = 0` and `converged = TRUE` — because zero dispersion means the data are already perfectly agreed.
+
+### Output fields
+
+`run_algorithm_a()` returns a named list:
+
+| Field | Description |
+|---|---|
+| `assigned_value` | Robust mean x* at convergence |
+| `robust_sd` | Robust standard deviation s* at convergence |
+| `winsorized_values` | Data frame with columns `id`, `original`, and `winsorized` showing the final clamped values |
+| `iterations` | Data frame with columns `iteration`, `x_star`, and `s_star` recording each iteration |
+| `converged` | Logical — `TRUE` if the three-significant-figure criterion was met |
+| `n_participants` | Number of finite observations used |
+| `error` | `NULL` on success; a character message if the algorithm could not run |
+
+```r
+values <- c(10.1, 10.2, 9.9, 10.0, 10.3, 50.0)
+result <- run_algorithm_a(values)
+
+cat("Assigned value:", result$assigned_value, "\n")
+cat("Robust SD:     ", result$robust_sd, "\n")
+cat("Converged:     ", result$converged, "\n")
+cat("Iterations:    ", nrow(result$iterations), "\n")
+
+# Inspect which values were Winsorized
+print(result$winsorized_values)
+```
+
+<Note>
+  Algorithm A requires at least three finite observations. When fewer than three values are present, `run_algorithm_a()` returns `NA` for both `assigned_value` and `robust_sd` along with an error message in the `error` field.
+</Note>

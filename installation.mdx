@@ -1,0 +1,132 @@
+---
+title: "Installing ptcalc in your R environment"
+description: "Step-by-step instructions for loading ptcalc in development mode or installing it as a package, then verifying the install by listing all exported functions."
+keywords: ["ptcalc", "install", "devtools", "R package", "load_all", "library"]
+---
+
+ptcalc is distributed as a local R package and installed using the [devtools](https://devtools.r-lib.org/) package. This page explains how to load it during development, how to install it for regular use, and how to confirm the installation is complete.
+
+## Prerequisites
+
+You need R (≥ 4.0 recommended) and the devtools package installed. If you do not have devtools yet, install it from CRAN:
+
+```r
+install.packages("devtools")
+```
+
+You also need a local copy of the ptcalc source directory. The examples below assume the source is at a path named `"ptcalc"` relative to your working directory. Adjust the path to match where you have cloned or extracted the package.
+
+## Load for development
+
+If you are actively editing ptcalc source files or exploring the code, use `devtools::load_all()`. This loads all exported and internal functions directly into your session without creating an installed copy, so changes to source files take effect after the next `load_all()` call.
+
+```r
+devtools::load_all("ptcalc")
+```
+
+<Tip>
+  `load_all()` is the fastest iteration loop when modifying package internals. You do not need to reinstall after every change — just call `load_all()` again.
+</Tip>
+
+## Install as a package
+
+For regular use where you want ptcalc available in any R session via `library()`, run a full install:
+
+```r
+devtools::install("ptcalc")
+```
+
+devtools compiles the package, registers it in your local R library, and makes it loadable by name from any working directory. You only need to repeat this step when you want to update to a newer version of the source.
+
+## Load the installed package
+
+After installation, load ptcalc the same way you load any R package:
+
+```r
+library(ptcalc)
+```
+
+If the package loaded successfully, R returns silently with no error message.
+
+## Verify the installation
+
+Confirm that all functions are available by listing the package exports:
+
+```r
+library(ptcalc)
+
+# List all exported names
+ls("package:ptcalc")
+```
+
+You should see all 21 exported functions:
+
+```r
+ [1] "calculate_en_score"
+ [2] "calculate_homogeneity_criterion"
+ [3] "calculate_homogeneity_criterion_expanded"
+ [4] "calculate_homogeneity_stats"
+ [5] "calculate_mad_e"
+ [6] "calculate_niqr"
+ [7] "calculate_stability_criterion"
+ [8] "calculate_stability_criterion_expanded"
+ [9] "calculate_stability_stats"
+[10] "calculate_u_hom"
+[11] "calculate_u_stab"
+[12] "calculate_z_prime_score"
+[13] "calculate_z_score"
+[14] "calculate_zeta_score"
+[15] "evaluate_en_score"
+[16] "evaluate_en_score_vec"
+[17] "evaluate_homogeneity"
+[18] "evaluate_stability"
+[19] "evaluate_z_score"
+[20] "evaluate_z_score_vec"
+[21] "run_algorithm_a"
+```
+
+You can also call the help page for any function to confirm the documentation is accessible:
+
+```r
+?run_algorithm_a
+?calculate_z_score
+```
+
+<Note>
+  If `ls("package:ptcalc")` returns an error saying the package is not found, the install did not complete successfully. Check that devtools printed no errors during the `install("ptcalc")` step and that the source path is correct.
+</Note>
+
+## Summary
+
+<Steps>
+  <Step title="Install devtools (once)">
+    ```r
+    install.packages("devtools")
+    ```
+  </Step>
+  <Step title="Choose your workflow">
+    For development (no persistent install):
+    ```r
+    devtools::load_all("ptcalc")
+    ```
+    For regular use:
+    ```r
+    devtools::install("ptcalc")
+    library(ptcalc)
+    ```
+  </Step>
+  <Step title="Verify the package is loaded">
+    ```r
+    ls("package:ptcalc")
+    ```
+    Confirm all 21 function names appear in the output.
+  </Step>
+</Steps>
+
+## Next steps
+
+With ptcalc loaded, move on to the quickstart to run your first calculation:
+
+<Card title="Quickstart" icon="rocket" href="/quickstart">
+  Run Algorithm A on participant data, compute a z-score, and classify the result in under five minutes.
+</Card>

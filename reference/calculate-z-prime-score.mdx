@@ -1,0 +1,75 @@
+---
+title: "calculate_z_prime_score: compute a z-prime score"
+description: "Compute a z-prime score that widens the z-score denominator by including the standard uncertainty of the assigned value, per ISO 13528:2022 Section 10.3."
+keywords: ["z-prime score", "z' score", "proficiency testing", "ISO 13528", "ptcalc"]
+---
+
+`calculate_z_prime_score()` computes the z'-score (z-prime score) defined in ISO 13528:2022 Section 10.3. It extends the standard z-score by incorporating the standard uncertainty of the assigned value (`u_xpt`) into the denominator. Use this function instead of `calculate_z_score()` when the assigned value itself carries a non-negligible uncertainty — for example, when it is derived from a reference laboratory measurement rather than a certified reference material.
+
+## Formula
+
+```
+z' = (x - x_pt) / sqrt(sigma_pt^2 + u_xpt^2)
+```
+
+The denominator combines `sigma_pt` (the standard deviation for proficiency assessment) with `u_xpt` (the standard uncertainty of the assigned value) in quadrature. When `u_xpt` is zero the result is identical to the plain z-score.
+
+## Parameters
+
+<ParamField path="x" type="numeric" required>
+  Participant result. The measurement value reported by the laboratory.
+</ParamField>
+
+<ParamField path="x_pt" type="numeric" required>
+  Assigned value. The reference value for the proficiency test round.
+</ParamField>
+
+<ParamField path="sigma_pt" type="numeric" required>
+  Standard deviation for proficiency assessment. Must contribute a finite, positive denominator when combined with `u_xpt`.
+</ParamField>
+
+<ParamField path="u_xpt" type="numeric" required>
+  Standard uncertainty of the assigned value. Quantifies the uncertainty in `x_pt` itself. A value of zero reduces the z'-score to a standard z-score.
+</ParamField>
+
+## Return value
+
+<ResponseField name="zprime" type="numeric">
+  The z'-score as a single numeric value. Returns `NA` (typed as `NA_real_`) when the computed denominator `sqrt(sigma_pt^2 + u_xpt^2)` is not finite or is less than or equal to zero.
+</ResponseField>
+
+<Note>
+  The function validates the combined denominator, not the individual inputs. Even if both `sigma_pt` and `u_xpt` are individually positive, non-finite inputs (e.g., `Inf`, `NaN`) will cause the function to return `NA`.
+</Note>
+
+## Example
+
+```r
+# z'-score with non-zero uncertainty in the assigned value
+zprime <- calculate_z_prime_score(
+  x       = 10.5,
+  x_pt    = 10.0,
+  sigma_pt = 0.5,
+  u_xpt   = 0.1
+)
+cat("z'-score:", zprime)
+# Denominator: sqrt(0.5^2 + 0.1^2) = sqrt(0.26) ≈ 0.5099
+# z' ≈ 0.5 / 0.5099 ≈ 0.9806
+
+# When u_xpt is 0, the result equals the z-score
+calculate_z_prime_score(x = 10.5, x_pt = 10.0, sigma_pt = 0.5, u_xpt = 0)
+# 1  (same as calculate_z_score(10.5, 10.0, 0.5))
+
+# Evaluate using the same z-score evaluator
+evaluate_z_score(zprime)  # "Satisfactorio"
+```
+
+## ISO reference
+
+ISO 13528:2022, *Statistical methods for use in proficiency testing by interlaboratory comparison*, Section 10.3.
+
+## See also
+
+- [`calculate_z_score`](/reference/calculate-z-score) — z-score without uncertainty in the assigned value
+- [`calculate_zeta_score`](/reference/calculate-zeta-score) — uses participant-reported uncertainty instead of `sigma_pt`
+- [`evaluate_z_score`](/reference/evaluate-z-score) — classifies a z or z'-score result

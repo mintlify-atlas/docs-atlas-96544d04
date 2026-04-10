@@ -1,0 +1,82 @@
+---
+title: 'calculate_zeta_score: compute a zeta-score'
+description: 'Compute a zeta-score using participant-reported standard uncertainty and assigned-value uncertainty in quadrature, per ISO 13528:2022 Section 10.4.'
+keywords: ['zeta score', 'proficiency testing', 'ISO 13528', 'uncertainty', 'ptcalc']
+---
+
+`calculate_zeta_score()` computes the zeta-score defined in ISO 13528:2022 Section 10.4. Unlike the z-score and z'-score, the zeta-score uses the participant's own reported standard uncertainty (`u_x`) in the denominator rather than a centrally-prescribed standard deviation (`sigma_pt`). Use this function when each participant reports a measurement uncertainty alongside their result, making it possible to evaluate performance on the participant's own metrological terms.
+
+## Formula
+
+```
+zeta = (x - x_pt) / sqrt(u_x^2 + u_xpt^2)
+```
+
+The denominator combines the standard uncertainty of the participant result (`u_x`) with the standard uncertainty of the assigned value (`u_xpt`) in quadrature.
+
+## Parameters
+
+<ParamField path="x" type="numeric" required>
+  Participant result. The measurement value reported by the laboratory.
+</ParamField>
+
+<ParamField path="x_pt" type="numeric" required>
+  Assigned value. The reference value for the proficiency test round.
+</ParamField>
+
+<ParamField path="u_x" type="numeric" required>
+  Standard uncertainty of the participant result. Reported by the participant as part of their submission. Must be a positive finite number to produce a valid score.
+</ParamField>
+
+<ParamField path="u_xpt" type="numeric" required>
+  Standard uncertainty of the assigned value. Quantifies the uncertainty in `x_pt` itself.
+</ParamField>
+
+## Return value
+
+<ResponseField name="zeta" type="numeric">
+  The zeta-score as a single numeric value. Returns `NA` (typed as `NA_real_`) when the computed denominator `sqrt(u_x^2 + u_xpt^2)` is not finite or is less than or equal to zero.
+</ResponseField>
+
+<Note>
+  The zeta-score is only meaningful when participants report credible, traceable uncertainty estimates. An artificially large `u_x` will suppress the zeta-score and may produce a falsely satisfactory result.
+</Note>
+
+## When to use zeta vs z
+
+| Scenario | Recommended score |
+|---|---|
+| `sigma_pt` is prescribed; participant does not report uncertainty | z-score |
+| `sigma_pt` is prescribed; assigned value has non-negligible uncertainty | z'-score |
+| Participant reports their own standard uncertainty alongside the result | zeta-score |
+
+## Example
+
+```r
+# Participant reports 10.5 ± 0.2 (u_x); assigned value 10.0 ± 0.1 (u_xpt)
+zeta <- calculate_zeta_score(
+  x     = 10.5,
+  x_pt  = 10.0,
+  u_x   = 0.2,
+  u_xpt = 0.1
+)
+cat("zeta-score:", zeta)
+# Denominator: sqrt(0.2^2 + 0.1^2) = sqrt(0.05) ≈ 0.2236
+# zeta ≈ 0.5 / 0.2236 ≈ 2.236
+
+# Evaluate using the z-score evaluator (same thresholds apply)
+evaluate_z_score(zeta)  # "Cuestionable"
+
+# Zero denominator returns NA
+calculate_zeta_score(x = 10.5, x_pt = 10.0, u_x = 0, u_xpt = 0)  # NA
+```
+
+## ISO reference
+
+ISO 13528:2022, *Statistical methods for use in proficiency testing by interlaboratory comparison*, Section 10.4.
+
+## See also
+
+- [`calculate_z_score`](/reference/calculate-z-score) — z-score without participant-reported uncertainty
+- [`calculate_en_score`](/reference/calculate-en-score) — En-score using expanded (k=2) uncertainties
+- [`evaluate_z_score`](/reference/evaluate-z-score) — classifies a zeta-score result using the same thresholds as z

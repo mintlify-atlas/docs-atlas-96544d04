@@ -1,0 +1,61 @@
+---
+title: 'calculate_z_score: compute a z-score'
+description: 'Compute a standardized z-score for a proficiency testing participant result using the assigned value and standard deviation for proficiency assessment.'
+keywords: ['z-score', 'proficiency testing', 'ISO 13528', 'ptcalc']
+---
+
+`calculate_z_score()` computes the z-score defined in ISO 13528:2022 Section 10.2. It measures how far a participant result deviates from the assigned value, expressed in units of the standard deviation for proficiency assessment. Use this function when `sigma_pt` is determined externally (for example, by a prescribed value or a statistical model applied to all participant results) and the uncertainty of the assigned value is negligible.
+
+## Formula
+
+```
+z = (x - x_pt) / sigma_pt
+```
+
+## Parameters
+
+<ParamField path="x" type="numeric" required>
+  Participant result. The measurement value reported by the laboratory.
+</ParamField>
+
+<ParamField path="x_pt" type="numeric" required>
+  Assigned value. The reference value for the proficiency test round, typically a consensus value or a certified reference value.
+</ParamField>
+
+<ParamField path="sigma_pt" type="numeric" required>
+  Standard deviation for proficiency assessment. Defines the acceptable spread of participant results. Must be a finite positive number.
+</ParamField>
+
+## Return value
+
+<ResponseField name="z" type="numeric">
+  The z-score as a single numeric value. Returns `NA` (typed as `NA_real_`) when `sigma_pt` is not finite or is less than or equal to zero.
+</ResponseField>
+
+<Note>
+  The function returns `NA` — not an error — when `sigma_pt <= 0` or is not finite. Always check the return value before passing it to `evaluate_z_score()`.
+</Note>
+
+## Example
+
+```r
+# Participant reports 10.5; assigned value is 10.0; sigma_pt is 0.5
+z <- calculate_z_score(x = 10.5, x_pt = 10.0, sigma_pt = 0.5)
+cat("z-score:", z)  # 1 (Satisfactorio)
+
+# Evaluate the result
+evaluate_z_score(z)  # "Satisfactorio"
+
+# Invalid sigma_pt returns NA
+calculate_z_score(x = 10.5, x_pt = 10.0, sigma_pt = 0)   # NA
+calculate_z_score(x = 10.5, x_pt = 10.0, sigma_pt = -1)  # NA
+```
+
+## ISO reference
+
+ISO 13528:2022, *Statistical methods for use in proficiency testing by interlaboratory comparison*, Section 10.2.
+
+## See also
+
+- [`calculate_z_prime_score`](/reference/calculate-z-prime-score) — extends z-score to account for uncertainty in the assigned value
+- [`evaluate_z_score`](/reference/evaluate-z-score) — classifies a z-score as satisfactory, questionable, or unsatisfactory

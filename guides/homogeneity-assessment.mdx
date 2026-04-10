@@ -1,0 +1,159 @@
+---
+title: 'Assessing PT material homogeneity with ptcalc'
+description: 'Prepare sample data, compute between-sample and within-sample statistics, apply basic and expanded ISO 13528:2022 criteria, and reach a homogeneity conclusion.'
+keywords: ['homogeneity', 'ISO 13528', 'between-sample SD', 'within-sample SD', 'MADe', 'sigma_pt', 'proficiency testing', 'ptcalc']
+---
+
+A homogeneity study verifies that all proficiency testing items distributed to participants are sufficiently uniform. ptcalc implements the full ISO 13528:2022 Section 9.2 procedure through three focused functions: `calculate_homogeneity_stats()`, `calculate_homogeneity_criterion()` (and its expanded variant), and `evaluate_homogeneity()`. This guide takes you from raw replicate measurements through to a pass/fail conclusion.
+
+## Preparing your sample data
+
+`calculate_homogeneity_stats()` expects a numeric **matrix** (or data frame that it will coerce) where:
+
+- Each **row** is one sample (item) from the batch.
+- Each **column** is one replicate measurement of that sample.
+
+You need at least 2 samples and at least 2 replicates per sample.
+
+```r
+library(ptcalc)
+
+set.seed(42)
+# 10 samples, 2 replicates each, nominally at 10 with within-sample SD ≈ 0.5
+sample_data <- matrix(
+  rnorm(20, mean = 10, sd = 0.5),
+  nrow = 10,
+  ncol = 2
+)
+```
+
+<Note>
+  If your laboratory reports results as a data frame with one column per
+  replicate, pass it directly — `calculate_homogeneity_stats()` calls
+  `as.matrix()` internally.
+</Note>
+
+## Calling `calculate_homogeneity_stats()`
+
+```r
+hom <- calculate_homogeneity_stats(sample_data)
+```
+
+Always verify there was no error before proceeding:
+
+```r
+if (!is.null(hom$error)) stop(hom$error)
+```
+
+## Interpreting key outputs
+
+The returned list contains all ANOVA components together with the robust sigma estimate. The fields you will use most often are:
+
+| Field              | Meaning                                                                                  |
+| ------------------ | ---------------------------------------------------------------------------------------- |
+| `ss`               | Between-sample standard deviation — the primary test statistic for homogeneity.         |
+| `sw`               | Within-sample standard deviation — measurement repeatability within a single item.      |
+| `sigma_pt`         | Robust scale estimate (MADe-based) — used as `sigma_pt` for score calculations.         |
+| `MADe`             | `1.483 × median(|x_ij − x_pt|)` — equals `sigma_pt` as returned.                       |
+| `u_sigma_pt`       | Standard uncertainty of `sigma_pt`: `1.25 × MADe / sqrt(g)`.                            |
+| `general_mean_homog` | Overall mean of all replicate values — used as reference in stability studies.         |
+| `x_pt`             | Median of first-replicate values — used as the assigned reference for stability.        |
+
+```r
+cat("g (samples)         :", hom$g, "\n")
+cat("m (replicates)      :", hom$m, "\n")
+cat("ss (between-sample) :", round(hom$ss, 4), "\n")
+cat("sw (within-sample)  :", round(hom$sw, 4), "\n")
+cat("sigma_pt (MADe)     :", round(hom$sigma_pt, 4), "\n")
+cat("u_sigma_pt          :", round(hom$u_sigma_pt, 4), "\n")
+```
+
+<Tip>
+  `ss` should be small relative to `sigma_pt` for a homogeneous batch. If `ss`
+  approaches or exceeds `sigma_pt`, the batch may introduce significant
+  between-sample variability that inflates participant scores.
+</Tip>
+
+## Calculating the homogeneity criterion
+
+The basic criterion is simply 30 % of `sigma_pt`:
+
+```r
+c_crit <- calculate_homogeneity_criterion(hom$sigma_pt)
+cat("Basic criterion (c):", round(c_crit, 4), "\n")
+```
+
+For a `sigma_pt` of 0.5, this gives `c = 0.15`. Your batch passes if `ss ≤ c`.
+
+### Expanded criterion
+
+The expanded criterion accounts for the uncertainty in `sigma_pt` itself. Use it when `u_sigma_pt` is non-negligible relative to `sigma_pt` — typically when you have fewer than 15 samples:
+
+```r
+c_exp <- calculate_homogeneity_criterion_expanded(
+  sigma_pt  = hom$sigma_pt,
+  u_sigma_pt = hom$u_sigma_pt
+)
+cat("Expanded criterion  :", round(c_exp, 4), "\n")
+```
+
+The expanded criterion is always ≥ the basic criterion, so a batch that just misses the basic criterion may still pass the expanded one.
+
+## Evaluating homogeneity
+
+Pass `ss`, the basic criterion, and the expanded criterion to `evaluate_homogeneity()`:
+
+```r
+result <- evaluate_homogeneity(
+  ss          = hom$ss,
+  c_criterion = c_crit,
+  c_expanded  = c_exp
+)
+
+cat(result$conclusion)
+```
+
+The function returns:
+
+| Field              | Type    | Meaning                                                            |
+| ------------------ | ------- | ------------------------------------------------------------------ |
+| `passes_criterion` | logical | `TRUE` if `ss ≤ c_criterion`.                                      |
+| `passes_expanded`  | logical | `TRUE` if `ss ≤ c_expanded` (or `NA` if not supplied).             |
+| `conclusion`       | string  | Human-readable pass/fail statement for both criteria.              |
+
+## Complete worked example
+
+```r
+library(ptcalc)
+
+set.seed(123)
+sample_data <- matrix(
+  rnorm(20, mean = 10, sd = 0.5),
+  nrow = 10,
+  ncol = 2
+)
+
+# Step 1: Compute statistics
+hom <- calculate_homogeneity_stats(sample_data)
+if (!is.null(hom$error)) stop(hom$error)
+
+# Step 2: Compute criteria
+c_crit <- calculate_homogeneity_criterion(hom$sigma_pt)
+c_exp  <- calculate_homogeneity_criterion_expanded(hom$sigma_pt, hom$u_sigma_pt)
+
+# Step 3: Evaluate
+result <- evaluate_homogeneity(hom$ss, c_crit, c_exp)
+cat(result$conclusion, "\n")
+
+# Step 4: Store outputs for downstream use in stability / uncertainty budget
+x_pt     <- hom$x_pt
+sigma_pt <- hom$sigma_pt
+ss_hom   <- hom$ss
+gen_mean <- hom$general_mean_homog
+```
+
+<Note>
+  Store `x_pt`, `sigma_pt`, `ss`, and `general_mean_homog` from the homogeneity
+  study — they are required inputs for `calculate_stability_stats()` and the
+  uncertainty budget functions.
+</Note>

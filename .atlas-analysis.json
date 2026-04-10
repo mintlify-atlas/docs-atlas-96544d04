@@ -1,0 +1,88 @@
+{
+  "projectType": "sdk-library",
+  "projectName": "ptcalc",
+  "projectDescription": "An R package implementing proficiency testing calculations — robust statistics, score computation, and homogeneity/stability assessment — per ISO 13528:2022 and ISO 17043:2024.",
+  "theme": "luma",
+  "primaryColor": "#2563EB",
+  "lightColor": "#EFF6FF",
+  "darkColor": "#1E3A8A",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": ["introduction", "installation", "quickstart"]
+          },
+          {
+            "group": "Concepts",
+            "pages": ["concepts/proficiency-testing", "concepts/robust-statistics", "concepts/scores", "concepts/homogeneity-stability"]
+          },
+          {
+            "group": "Guides",
+            "pages": ["guides/algorithm-a", "guides/score-calculation", "guides/homogeneity-assessment", "guides/stability-assessment", "guides/uncertainty-budget"]
+          }
+        ]
+      },
+      {
+        "tab": "Function Reference",
+        "groups": [
+          {
+            "group": "Robust Statistics",
+            "pages": ["reference/calculate-niqr", "reference/calculate-mad-e", "reference/run-algorithm-a"]
+          },
+          {
+            "group": "Score Calculations",
+            "pages": ["reference/calculate-z-score", "reference/calculate-z-prime-score", "reference/calculate-zeta-score", "reference/calculate-en-score"]
+          },
+          {
+            "group": "Score Evaluation",
+            "pages": ["reference/evaluate-z-score", "reference/evaluate-en-score"]
+          },
+          {
+            "group": "Homogeneity & Stability",
+            "pages": ["reference/calculate-homogeneity-stats", "reference/calculate-homogeneity-criterion", "reference/evaluate-homogeneity", "reference/calculate-stability-stats", "reference/calculate-stability-criterion", "reference/evaluate-stability"]
+          },
+          {
+            "group": "Uncertainty",
+            "pages": ["reference/calculate-u-hom", "reference/calculate-u-stab"]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "ISO 13528:2022 Algorithm A iterative robust mean and standard deviation via Winsorization",
+    "Normalized IQR (nIQR) and scaled MAD (MADe) as robust scale estimators",
+    "Four score types: z, z', zeta, and En for diverse proficiency testing scenarios",
+    "Vectorized score evaluation for batch-processing participant results",
+    "Homogeneity assessment with ANOVA-based between- and within-sample statistics",
+    "Stability assessment comparing stability and homogeneity study means",
+    "Expanded criteria incorporating uncertainty contributions per ISO 13528:2022",
+    "Uncertainty budget components u_hom and u_stab for assigned value uncertainty"
+  ],
+  "publicApiSurface": [
+    "calculate_niqr(x)",
+    "calculate_mad_e(x)",
+    "run_algorithm_a(values, ids, max_iter)",
+    "calculate_z_score(x, x_pt, sigma_pt)",
+    "calculate_z_prime_score(x, x_pt, sigma_pt, u_xpt)",
+    "calculate_zeta_score(x, x_pt, u_x, u_xpt)",
+    "calculate_en_score(x, x_pt, U_x, U_xpt)",
+    "evaluate_z_score(z)",
+    "evaluate_z_score_vec(z)",
+    "evaluate_en_score(en)",
+    "evaluate_en_score_vec(en)",
+    "calculate_homogeneity_stats(sample_data)",
+    "calculate_homogeneity_criterion(sigma_pt)",
+    "calculate_homogeneity_criterion_expanded(sigma_pt, u_sigma_pt)",
+    "evaluate_homogeneity(ss, c_criterion, c_expanded)",
+    "calculate_stability_stats(stab_sample_data, hom_general_mean_homog, hom_stab_x_pt, hom_stab_sigma_pt)",
+    "calculate_stability_criterion(sigma_pt)",
+    "calculate_stability_criterion_expanded(c_criterion, u_hom_mean, u_stab_mean)",
+    "evaluate_stability(diff_hom_stab, c_criterion, c_expanded)",
+    "calculate_u_hom(ss)",
+    "calculate_u_stab(diff_hom_stab, c_criterion)"
+  ]
+}

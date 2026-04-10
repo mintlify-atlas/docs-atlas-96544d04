@@ -1,0 +1,51 @@
+---
+title: 'calculate_mad_e: Scaled MAD scale estimator'
+description: 'Compute MADe = 1.483 * MAD as an outlier-resistant standard deviation estimate with 50% breakdown point, per ISO 13528:2022 Section 9.4.'
+keywords: ['MADe', 'median absolute deviation', 'robust statistics', 'scale estimator', 'ISO 13528']
+---
+
+`calculate_mad_e(x)` computes a robust estimate of scale by multiplying the median absolute deviation (MAD) by the consistency factor 1.483. For data drawn from a normal distribution, this estimate converges to the population standard deviation σ. MADe has a higher breakdown point than nIQR and is the preferred initialiser used internally by Algorithm A.
+
+## Parameters
+
+<ParamField path="x" type="numeric vector" required>
+  A numeric vector of participant results. Non-finite values (`NA`, `NaN`, `Inf`, `-Inf`) are silently removed before calculation.
+</ParamField>
+
+## Return value
+
+<ResponseField name="MADe" type="numeric scalar">
+  The scaled median absolute deviation: `1.483 × median(|xᵢ − median(x)|)`, computed on the finite subset of `x`. Returns `NA` if no finite values remain after filtering.
+</ResponseField>
+
+<Note>
+  Unlike `calculate_niqr`, this function only requires **one** finite value to return a numeric result (it will return `0` for a single-element vector, since all absolute deviations are zero). It returns `NA_real_` only when the finite subset is empty.
+</Note>
+
+## ISO reference
+
+Defined in **ISO 13528:2022, Section 9.4** alongside nIQR as a recommended robust scale estimator. The factor 1.483 ≈ 1 / Φ⁻¹(0.75), where Φ⁻¹ is the standard-normal quantile function, ensuring consistency under normality.
+
+## Example
+
+```r
+# Calculate MADe for data that contains a gross outlier
+values <- c(10.1, 10.2, 9.9, 10.0, 50.0)  # 50 is outlier
+calculate_mad_e(values)
+#> [1] 0.1483
+
+# Compare with sample SD, which is heavily inflated by the outlier
+sd(values)
+#> [1] 17.94
+
+# Returns NA for an empty or all-non-finite vector
+calculate_mad_e(c(NA, NaN, Inf))
+#> [1] NA
+```
+
+The example illustrates MADe's robustness: the gross outlier of 50 does not materially affect the result because the median and median absolute deviation are both insensitive to a single extreme value.
+
+## See also
+
+- [`calculate_niqr`](/reference/calculate-niqr) — alternative robust scale estimator based on the interquartile range
+- [`run_algorithm_a`](/reference/run-algorithm-a) — ISO 13528 Algorithm A, which uses MADe as its initial scale estimate

@@ -1,0 +1,138 @@
+---
+title: 'run_algorithm_a: ISO 13528 Algorithm A robust estimates'
+description: 'Run iterative Algorithm A (Winsorization) to compute a robust mean and standard deviation from proficiency testing data per ISO 13528:2022 Annex C.3.'
+keywords: ['Algorithm A', 'Winsorization', 'robust mean', 'robust SD', 'ISO 13528', 'proficiency testing']
+---
+
+`run_algorithm_a(values, ids, max_iter)` implements the iterative Winsorization procedure defined in ISO 13528:2022 Annex C.3. Starting from the median and scaled MAD as initial estimates, each iteration clamps participant results to a symmetric window around the current robust mean, then recomputes the mean and standard deviation from the clamped values. Iteration continues until both estimates are stable to three significant figures, or until `max_iter` is reached.
+
+## Parameters
+
+<ParamField path="values" type="numeric vector" required>
+  A numeric vector of participant results. Non-finite values are removed before the algorithm starts. At least three finite values are required.
+</ParamField>
+
+<ParamField path="ids" type="vector" default="NULL">
+  An optional identifier vector of the same length as `values`. When supplied, the returned `winsorized_values` data frame uses these identifiers in its `id` column. When `NULL`, sequential integers are assigned automatically.
+</ParamField>
+
+<ParamField path="max_iter" type="integer" default="50">
+  Maximum number of Winsorization iterations. The algorithm stops early if convergence is detected. Defaults to `50`, which is sufficient for virtually all well-conditioned proficiency testing datasets.
+</ParamField>
+
+## Return value
+
+The function always returns a named list. When an error occurs, `error` contains a descriptive message and the remaining fields hold `NA` or empty data frames; on success, `error` is `NULL`.
+
+<ResponseField name="assigned_value" type="numeric scalar">
+  The robust mean x* at convergence (or at the last completed iteration if `converged` is `FALSE`). This is the recommended assigned value for the proficiency testing round.
+</ResponseField>
+
+<ResponseField name="robust_sd" type="numeric scalar">
+  The robust standard deviation s* at convergence. Use this as the standard deviation for z-score calculation.
+</ResponseField>
+
+<ResponseField name="iterations" type="data.frame">
+  A data frame recording the estimates produced at each iteration.
+
+  <Expandable title="columns">
+    <ResponseField name="iteration" type="integer">
+      Iteration number, starting at 1.
+    </ResponseField>
+    <ResponseField name="x_star" type="numeric">
+      Robust mean estimate after this iteration.
+    </ResponseField>
+    <ResponseField name="s_star" type="numeric">
+      Robust standard deviation estimate after this iteration.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="winsorized_values" type="data.frame">
+  A data frame showing how each participant's value was clamped in the final iteration.
+
+  <Expandable title="columns">
+    <ResponseField name="id" type="vector">
+      Participant identifier (from `ids`, or sequential integer if `ids` was `NULL`).
+    </ResponseField>
+    <ResponseField name="original" type="numeric">
+      The participant's original finite result.
+    </ResponseField>
+    <ResponseField name="winsorized" type="numeric">
+      The clamped value used in the final iteration: `max(min(original, x* + δ), x* − δ)` where δ = 1.5 × s*.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="converged" type="logical">
+  `TRUE` if both x* and s* were stable to three significant figures before `max_iter` was reached; `FALSE` otherwise.
+</ResponseField>
+
+<ResponseField name="n_participants" type="integer">
+  Number of participants included in the calculation after removing non-finite values.
+</ResponseField>
+
+<ResponseField name="error" type="character or NULL">
+  `NULL` on success. A character string describing the failure when:
+  - fewer than three finite values are present (`"Algorithm A requires at least 3 valid observations."`), or
+  - the standard deviation collapses to zero during iteration (`"Algorithm A collapsed due to zero standard deviation."`).
+</ResponseField>
+
+<Note>
+  When `s*` is zero after initialisation (all values are identical), the function returns immediately with `robust_sd = 0` and `converged = TRUE` rather than raising an error. This matches the fallback behaviour described in ISO 13528:2022 NOTE 2.
+</Note>
+
+## ISO reference
+
+Specified in **ISO 13528:2022, Annex C.3**. The update formulas applied at each iteration are:
+
+- **δ** = 1.5 × s* (Formula C.8 Winsorization half-width)
+- **x\*** = mean of Winsorized values (Formula C.9)
+- **s\*** = 1.134 × √(Σ(xᵢ − x\*)² / (p − 1)) (Formula C.10)
+
+The scaling factor 1.134 corrects for the downward bias introduced by Winsorization under normality.
+
+## Example
+
+```r
+# Robust mean/sd with one gross outlier
+values <- c(10.1, 10.2, 9.9, 10.0, 10.3, 50.0)  # 50 is outlier
+result <- run_algorithm_a(values)
+
+cat("Robust mean:", result$assigned_value, "\n")
+#> Robust mean: 10.1
+
+cat("Robust SD:", result$robust_sd, "\n")
+#> Robust SD: 0.1414
+
+cat("Converged:", result$converged, "\n")
+#> Converged: TRUE
+
+cat("Iterations:", nrow(result$iterations), "\n")
+#> Iterations: 3
+
+# Inspect which values were winsorized
+print(result$winsorized_values)
+#>   id original winsorized
+#> 1  1     10.1      10.10
+#> 2  2     10.2      10.20
+#> 3  3      9.9       9.90
+#> 4  4     10.0      10.00
+#> 5  5     10.3      10.30
+#> 6  6     50.0      10.31   # outlier was clamped
+
+# Supply participant IDs
+ids <- paste0("LAB-", 1:6)
+result2 <- run_algorithm_a(values, ids = ids)
+head(result2$winsorized_values)
+
+# Error case: fewer than 3 observations
+result3 <- run_algorithm_a(c(10.0, 10.1))
+cat(result3$error, "\n")
+#> Algorithm A requires at least 3 valid observations.
+```
+
+## See also
+
+- [`calculate_mad_e`](/reference/calculate-mad-e) — the scale estimator used to initialise s*
+- [`calculate_niqr`](/reference/calculate-niqr) — alternative robust scale estimator

@@ -1,0 +1,144 @@
+---
+title: "Homogeneity and stability of PT materials"
+description: "Learn how ptcalc checks PT material uniformity and temporal stability using ISO 13528:2022 ANOVA statistics, criteria, and uncertainty contributions."
+keywords: ["homogeneity", "stability", "PT materials", "ISO 13528", "between-sample SD", "within-sample SD", "uncertainty budget"]
+---
+
+Before you distribute reference materials to PT participants, you need to confirm two properties: that every distributed sample contains essentially the same amount of the measurand (homogeneity), and that the measurand content does not change significantly between preparation and the measurement deadline (stability). If either property fails, the assigned value and sigma_pt you derive from participant results will be corrupted by variance that has nothing to do with laboratory performance. ptcalc implements both assessments following ISO 13528:2022 Sections 9.2 and 9.3.
+
+## Homogeneity
+
+Homogeneity testing asks: are the individual PT items sufficiently uniform that between-sample differences will not inflate the apparent spread of participant results?
+
+You assess homogeneity by selecting a random subset of prepared items, measuring each item in duplicate (or more replicates), and then partitioning the total variance into a between-sample component and a within-sample component using a one-way ANOVA structure.
+
+### Key statistics
+
+`calculate_homogeneity_stats()` returns these central quantities:
+
+| Statistic | Symbol | Description |
+|---|---|---|
+| Between-sample SD | `ss` | Standard deviation of the variation between different items |
+| Within-sample SD | `sw` | Standard deviation of replicate measurements on the same item |
+| Robust sigma estimate | `MADe` | 1.483 × median of absolute differences between 2nd replicates and x_pt |
+| sigma_pt | `sigma_pt` | Standard deviation for proficiency assessment (equals MADe from homogeneity data) |
+| Uncertainty of sigma_pt | `u_sigma_pt` | 1.25 × MADe / sqrt(g), where g is the number of samples |
+
+The between-sample SD `ss` is computed as:
+
+ss = sqrt( max(0, s_x_bar² − sw² / m) )
+
+where s_x_bar² is the variance of sample means, sw² is the within-sample variance, and m is the number of replicates per sample. For m = 2, ptcalc computes sw from the ranges of duplicates: sw = sqrt( Σ(|x_i1 − x_i2|²) / (2g) ).
+
+### The homogeneity criterion
+
+ISO 13528:2022 Section 9.2.3 defines the homogeneity criterion as:
+
+c = 0.3 × sigma_pt
+
+The material is considered sufficiently homogeneous when `ss ≤ c`. The 0.3 factor means you are requiring that between-sample variation account for no more than 30 % of the performance assessment standard deviation.
+
+```r
+# 10 items measured in duplicate
+sample_data <- matrix(c(
+  10.05, 10.08,
+  9.97,  9.99,
+  10.02, 10.01,
+  10.10, 10.07,
+  9.95,  9.96
+), nrow = 5, ncol = 2, byrow = TRUE)
+
+stats <- calculate_homogeneity_stats(sample_data)
+cat("ss:", stats$ss, "\n")
+cat("sigma_pt:", stats$sigma_pt, "\n")
+
+c_crit <- calculate_homogeneity_criterion(stats$sigma_pt)
+result <- evaluate_homogeneity(stats$ss, c_crit)
+cat(result$conclusion, "\n")
+```
+
+### Expanded criterion
+
+When `u_sigma_pt` is substantial relative to `sigma_pt`, you can use the expanded criterion (ISO 13528:2022 Section 9.2.4):
+
+c_expanded = c × sqrt(1 + (u_sigma_pt / sigma_pt)²)
+
+`calculate_homogeneity_criterion_expanded()` computes this value. A material that fails the basic criterion may still pass the expanded criterion, reflecting the uncertainty in the assessment itself.
+
+<Note>
+  The expanded criterion does not relax the requirements; it acknowledges that the criterion itself carries uncertainty when sigma_pt is estimated from limited data. If a material fails even the expanded criterion, you should investigate the preparation process.
+</Note>
+
+## Stability
+
+Stability testing asks: does the measurand content of PT items change significantly between the time the homogeneity study was conducted and the time participants receive and measure their items?
+
+You assess stability by measuring a subset of items at a later time point — typically after the items have been shipped or stored under conditions representative of participant use — and comparing the mean of those measurements against the mean from the homogeneity study.
+
+### Key statistic
+
+The central stability statistic is:
+
+diff_hom_stab = |stability_mean − homogeneity_mean|
+
+where both means are the grand means across all values (not just sample means) in each respective study. `calculate_stability_stats()` returns this as `diff_hom_stab`.
+
+The stability criterion mirrors the homogeneity criterion:
+
+c_stab = 0.3 × sigma_pt
+
+The material is considered stable when `diff_hom_stab ≤ c_stab`.
+
+```r
+# Stability samples measured after storage
+stab_data <- matrix(c(
+  10.04, 10.06,
+  9.98,  10.00,
+  10.01, 10.03,
+  10.08, 10.09,
+  9.94,  9.97
+), nrow = 5, ncol = 2, byrow = TRUE)
+
+stab_stats <- calculate_stability_stats(
+  stab_sample_data       = stab_data,
+  hom_general_mean_homog = stats$general_mean_homog,
+  hom_stab_x_pt          = stats$x_pt,
+  hom_stab_sigma_pt      = stats$sigma_pt
+)
+
+c_stab <- calculate_stability_criterion(stab_stats$hom_stab_sigma_pt)
+result <- evaluate_stability(stab_stats$diff_hom_stab, c_stab)
+cat(result$conclusion, "\n")
+```
+
+### Expanded stability criterion
+
+The expanded stability criterion incorporates the uncertainty of both study means:
+
+c_stab_expanded = c_stab + 2 × sqrt(u_hom_mean² + u_stab_mean²)
+
+`calculate_stability_criterion_expanded()` computes this value. The factor 2 accounts for the combined coverage at approximately 95 % for two independent normally distributed means.
+
+## How these assessments feed into the uncertainty budget
+
+The homogeneity and stability statistics contribute directly to the uncertainty budget of the assigned value, as specified in ISO 13528:2022 Section 9.5.
+
+**Uncertainty from homogeneity (`u_hom`):** Equal to `ss`, the between-sample standard deviation. If the material passes the homogeneity criterion, `ss` is still retained as an uncertainty contribution — passing the criterion means it is small enough to be acceptable, not zero.
+
+```r
+u_hom <- calculate_u_hom(stats$ss)
+```
+
+**Uncertainty from stability (`u_stab`):** If the stability criterion is met (`diff_hom_stab ≤ c_stab`), `u_stab` is set to zero — the temporal shift is indistinguishable from noise. If the criterion is not met, `u_stab` is treated as a rectangular distribution:
+
+u_stab = diff_hom_stab / sqrt(3)
+
+```r
+u_stab <- calculate_u_stab(stab_stats$diff_hom_stab, c_stab)
+```
+
+You then combine `u_hom` and `u_stab` with any other uncertainty contributions (characterization uncertainty, method uncertainty) in quadrature to form the combined standard uncertainty of the assigned value, `u_xpt`. This `u_xpt` feeds into the z'-score and zeta-score denominators when you evaluate participant performance.
+
+<Tip>
+  Run the homogeneity and stability assessments before you finalize sigma_pt. If `ss` is large relative to sigma_pt, participants' z-scores will include between-item variation that has nothing to do with their analytical performance — which is unfair and misleading.
+</Tip>

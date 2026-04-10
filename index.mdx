@@ -1,97 +1,73 @@
 ---
-title: "Introduction"
-description: "Welcome to the new home for your documentation"
+title: "ptcalc: Proficiency Testing Calculations for R"
+description: "ptcalc is an R package for ISO 13528:2022 and ISO 17043:2024 proficiency testing — robust statistics, z-scores, and homogeneity/stability assessment."
 ---
 
-## Setting up
+ptcalc is an R package that implements the statistical methods required for proficiency testing (PT) schemes under ISO 13528:2022 and ISO 17043:2024. It provides robust estimators, four score types (z, z′, zeta, En), and complete homogeneity and stability assessment workflows — all as pure functions with no external dependencies beyond `stats` and `dplyr`.
 
-Get your documentation site up and running in minutes.
-
-<Card
-  title="Start here"
-  icon="rocket"
-  href="/quickstart"
-  horizontal
->
-  Follow our three step quickstart guide.
-</Card>
-
-## Make it yours
-
-Design a docs site that looks great and empowers your users.
-
-<Columns cols={2}>
-  <Card
-    title="Edit locally"
-    icon="pen-to-square"
-    href="/development"
-  >
-    Edit your docs locally and preview them in real time.
+<CardGroup cols={2}>
+  <Card title="Installation" icon="download" href="/installation">
+    Install ptcalc from source using devtools and load it into your R session.
   </Card>
-  <Card
-    title="Customize your site"
-    icon="palette"
-    href="/essentials/settings"
-  >
-    Customize the design and colors of your site to match your brand.
+  <Card title="Quickstart" icon="rocket" href="/quickstart">
+    Run Algorithm A, compute a z-score, and evaluate a participant result in minutes.
   </Card>
-    <Card
-    title="Set up navigation"
-    icon="map"
-    href="/essentials/navigation"
-  >
-    Organize your docs to help users find what they need and succeed with your product.
+  <Card title="Concepts" icon="book" href="/concepts/proficiency-testing">
+    Understand proficiency testing, robust statistics, and the ISO standards behind ptcalc.
   </Card>
-  <Card
-    title="API documentation"
-    icon="terminal"
-    href="/api-reference/introduction"
-  >
-    Auto-generate API documentation from OpenAPI specifications.
+  <Card title="Function Reference" icon="code" href="/reference/calculate-z-score">
+    Browse every exported function with parameters, return values, and examples.
   </Card>
-</Columns>
+</CardGroup>
 
-## Create beautiful pages
+## What ptcalc covers
 
-Everything you need to create world-class documentation.
+<CardGroup cols={2}>
+  <Card title="Robust Statistics" icon="chart-scatter" href="/concepts/robust-statistics">
+    nIQR, MADe, and Algorithm A for outlier-resistant location and scale estimates.
+  </Card>
+  <Card title="Score Calculations" icon="calculator" href="/concepts/scores">
+    z, z′, zeta, and En scores for individual participant performance assessment.
+  </Card>
+  <Card title="Homogeneity Assessment" icon="vials" href="/guides/homogeneity-assessment">
+    ANOVA-based between- and within-sample statistics with expanded criteria.
+  </Card>
+  <Card title="Stability Assessment" icon="chart-line" href="/guides/stability-assessment">
+    Compare homogeneity and stability study means with ISO 13528 criteria.
+  </Card>
+</CardGroup>
 
-<Columns cols={2}>
-  <Card
-    title="Write with MDX"
-    icon="pen-fancy"
-    href="/essentials/markdown"
-  >
-    Use MDX to style your docs pages.
-  </Card>
-  <Card
-    title="Code samples"
-    icon="code"
-    href="/essentials/code"
-  >
-    Add sample code to demonstrate how to use your product.
-  </Card>
-  <Card
-    title="Images"
-    icon="image"
-    href="/essentials/images"
-  >
-    Display images and other media.
-  </Card>
-  <Card
-    title="Reusable snippets"
-    icon="recycle"
-    href="/essentials/reusable-snippets"
-  >
-    Write once and reuse across your docs.
-  </Card>
-</Columns>
+## Get started in three steps
 
-## Need inspiration?
+<Steps>
+  <Step title="Install ptcalc">
+    Load the package from your local source directory using devtools:
 
-<Card
-  title="See complete examples"
-  icon="stars"
-  href="https://mintlify.com/customers"
->
-  Browse our showcase of exceptional documentation sites.
-</Card>
+    ```r
+    devtools::install("ptcalc")
+    library(ptcalc)
+    ```
+  </Step>
+  <Step title="Compute robust statistics">
+    Run Algorithm A on participant results to get an outlier-resistant assigned value and standard deviation:
+
+    ```r
+    values <- c(10.1, 10.2, 9.9, 10.0, 10.3, 50.0)
+    result <- run_algorithm_a(values)
+    cat("Assigned value:", result$assigned_value, "\n")
+    cat("Robust SD:", result$robust_sd, "\n")
+    ```
+  </Step>
+  <Step title="Evaluate participant scores">
+    Calculate and evaluate a z-score for any participant result:
+
+    ```r
+    z <- calculate_z_score(x = 10.5, x_pt = result$assigned_value, sigma_pt = result$robust_sd)
+    cat("z =", z, "->", evaluate_z_score(z))
+    ```
+  </Step>
+</Steps>
+
+<Note>
+  ptcalc follows ISO 13528:2022 Annex C.3 for Algorithm A and Sections 10.2-10.5 for score calculations. All functions are pure — they have no side effects and return `NA` on invalid input rather than throwing errors.
+</Note>
